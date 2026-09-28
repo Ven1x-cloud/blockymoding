@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "mijn_eerste_mod:block/farlands_glitch_part"
+  }
+}

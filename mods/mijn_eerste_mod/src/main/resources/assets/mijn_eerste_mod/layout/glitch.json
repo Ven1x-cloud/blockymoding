@@ -1,0 +1,72 @@
+{
+  "id": "glitch",
+  "name": "glitch",
+  "width": 176,
+  "height": 166,
+  "mode": "free",
+  "bgColor": "#C6C6C6",
+  "elements": [
+    {
+      "x": 19,
+      "y": 132,
+      "order": 0,
+      "type": "button",
+      "w": 90,
+      "h": 20,
+      "text": "glitch"
+    },
+    {
+      "x": 14,
+      "y": 56,
+      "order": 1,
+      "type": "button",
+      "w": 90,
+      "h": 20,
+      "text": "glitch"
+    },
+    {
+      "x": 49,
+      "y": 72,
+      "order": 2,
+      "type": "button",
+      "w": 90,
+      "h": 20,
+      "text": "glitch"
+    },
+    {
+      "x": 83,
+      "y": 25,
+      "order": 3,
+      "type": "button",
+      "w": 90,
+      "h": 20,
+      "text": "glitch"
+    },
+    {
+      "x": 59,
+      "y": 104,
+      "order": 4,
+      "type": "button",
+      "w": 90,
+      "h": 20,
+      "text": "glitch"
+    },
+    {
+      "x": 51,
+      "y": 120,
+      "order": 5,
+      "type": "button",
+      "w": 90,
+      "h": 20,
+      "text": "glitch"
+    },
+    {
+      "x": 12,
+      "y": 12,
+      "order": 6,
+      "type": "label",
+      "text": "glitching..",
+      "color": "#404040"
+    }
+  ]
+}

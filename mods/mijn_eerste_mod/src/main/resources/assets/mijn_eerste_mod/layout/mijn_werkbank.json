@@ -1,0 +1,396 @@
+{
+  "id": "mijn_werkbank",
+  "name": "glitchbench",
+  "width": 176,
+  "height": 166,
+  "mode": "crafting",
+  "bgColor": "#C6C6C6",
+  "elements": [
+    {
+      "type": "label",
+      "x": 8,
+      "y": 7,
+      "text": "Mijn Werkbank",
+      "color": "#404040",
+      "order": 0
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 9,
+      "x": 8,
+      "y": 84,
+      "size": 16,
+      "order": 11
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 10,
+      "x": 26,
+      "y": 84,
+      "size": 16,
+      "order": 12
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 11,
+      "x": 44,
+      "y": 84,
+      "size": 16,
+      "order": 13
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 12,
+      "x": 62,
+      "y": 84,
+      "size": 16,
+      "order": 14
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 13,
+      "x": 80,
+      "y": 84,
+      "size": 16,
+      "order": 15
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 14,
+      "x": 98,
+      "y": 84,
+      "size": 16,
+      "order": 16
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 15,
+      "x": 116,
+      "y": 84,
+      "size": 16,
+      "order": 17
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 16,
+      "x": 134,
+      "y": 84,
+      "size": 16,
+      "order": 18
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 17,
+      "x": 152,
+      "y": 84,
+      "size": 16,
+      "order": 19
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 18,
+      "x": 8,
+      "y": 102,
+      "size": 16,
+      "order": 20
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 19,
+      "x": 26,
+      "y": 102,
+      "size": 16,
+      "order": 21
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 20,
+      "x": 44,
+      "y": 102,
+      "size": 16,
+      "order": 22
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 21,
+      "x": 62,
+      "y": 102,
+      "size": 16,
+      "order": 23
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 22,
+      "x": 80,
+      "y": 102,
+      "size": 16,
+      "order": 24
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 23,
+      "x": 98,
+      "y": 102,
+      "size": 16,
+      "order": 25
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 24,
+      "x": 116,
+      "y": 102,
+      "size": 16,
+      "order": 26
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 25,
+      "x": 134,
+      "y": 102,
+      "size": 16,
+      "order": 27
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 26,
+      "x": 152,
+      "y": 102,
+      "size": 16,
+      "order": 28
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 27,
+      "x": 8,
+      "y": 120,
+      "size": 16,
+      "order": 29
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 28,
+      "x": 26,
+      "y": 120,
+      "size": 16,
+      "order": 30
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 29,
+      "x": 44,
+      "y": 120,
+      "size": 16,
+      "order": 31
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 30,
+      "x": 62,
+      "y": 120,
+      "size": 16,
+      "order": 32
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 31,
+      "x": 80,
+      "y": 120,
+      "size": 16,
+      "order": 33
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 32,
+      "x": 98,
+      "y": 120,
+      "size": 16,
+      "order": 34
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 33,
+      "x": 116,
+      "y": 120,
+      "size": 16,
+      "order": 35
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 34,
+      "x": 134,
+      "y": 120,
+      "size": 16,
+      "order": 36
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 35,
+      "x": 152,
+      "y": 120,
+      "size": 16,
+      "order": 37
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 0,
+      "x": 8,
+      "y": 142,
+      "size": 16,
+      "order": 38
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 1,
+      "x": 26,
+      "y": 142,
+      "size": 16,
+      "order": 39
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 2,
+      "x": 44,
+      "y": 142,
+      "size": 16,
+      "order": 40
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 3,
+      "x": 62,
+      "y": 142,
+      "size": 16,
+      "order": 41
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 4,
+      "x": 80,
+      "y": 142,
+      "size": 16,
+      "order": 42
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 5,
+      "x": 98,
+      "y": 142,
+      "size": 16,
+      "order": 43
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 6,
+      "x": 116,
+      "y": 142,
+      "size": 16,
+      "order": 44
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 7,
+      "x": 134,
+      "y": 142,
+      "size": 16,
+      "order": 45
+    },
+    {
+      "type": "slot",
+      "role": "player",
+      "index": 8,
+      "x": 152,
+      "y": 142,
+      "size": 16,
+      "order": 46
+    },
+    {
+      "x": 50,
+      "y": 33,
+      "order": 37,
+      "type": "slot",
+      "role": "input",
+      "index": 0,
+      "size": 16
+    },
+    {
+      "x": 32,
+      "y": 33,
+      "order": 38,
+      "type": "slot",
+      "role": "input",
+      "index": 1,
+      "size": 16
+    },
+    {
+      "x": 50,
+      "y": 51,
+      "order": 39,
+      "type": "slot",
+      "role": "input",
+      "index": 2,
+      "size": 16
+    },
+    {
+      "x": 32,
+      "y": 51,
+      "order": 40,
+      "type": "slot",
+      "role": "input",
+      "index": 3,
+      "size": 16
+    },
+    {
+      "x": 78,
+      "y": 44,
+      "order": 41,
+      "type": "button",
+      "w": 25,
+      "h": 10,
+      "text": ">"
+    },
+    {
+      "x": 116,
+      "y": 42,
+      "order": 42,
+      "type": "slot",
+      "role": "output",
+      "index": 0,
+      "size": 16
+    }
+  ]
+}

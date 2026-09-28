@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "mijn_eerste_mod",
+  "version": "${version}",
+  "name": "Mijn eerste Mod",
+  "description": "Mijn eerste Mod – gemaakt met BlockyMod Studio.",
+  "authors": [
+    "Modder"
+  ],
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.modder.mijn_eerste_mod.ModMain"
+    ],
+    "client": [
+      "com.modder.mijn_eerste_mod.client.ModClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.21",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

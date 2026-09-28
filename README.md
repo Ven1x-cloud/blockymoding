@@ -80,6 +80,28 @@ officiële Mojang-mappings, Java 25). Optioneel ook **1.20.1 / 1.21.1** (Yarn, J
 > iets anders heet: **plak de compilefout in de chat** en dan fix ik hem in
 > `ai-code/` – daarna haal je de fix met één knop op.
 
+## 📤 Alles naar GitHub (knop)
+
+Knop **📤 Alles pushen naar GitHub** (tab 🤖 AI-code / GitHub) zet in **één
+keer** alles wat je in de app maakt in je repo – netjes in `mods/<modid>/`:
+
+- `project.json` – jouw volledige ontwerp (blokken, items, GUI's, werkbanken,
+  mobs, verhaal) – **zonder** token erin
+- alle gegenereerde code (Java, Gradle, JSON) – dezelfde bestanden als de ZIP-export
+- alle getekende texturen (PNG)
+
+Alles gaat als één nette commit op de gekozen branch.
+
+**Eén keer instellen – een GitHub-token** (schrijven kan nooit zonder):
+
+1. <https://github.com> → je avatar → **Settings**
+2. Links **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+3. **Generate new token (classic)** → naam bv. `blockymod` → vink **repo** aan → **Generate**
+4. Kopieer de token (`ghp_...`) → plak 'm in de app bij **Token**
+
+De token blijft alleen op je eigen computer (lokale opslag) en gaat **niet**
+mee in de push. Hetzelfde veld gebruik je voor privé-repos bij het ophalen.
+
 ## 🖼️ Logo & bureaublad
 
 - Het app-logo (groene werkbank-cube) zit in de topbar, als favicon én als

@@ -49,8 +49,39 @@ const ghListing = [
   { name: "extra", path: "ai-code/extra", type: "dir", size: 0 },
   { name: "Voorbeeld.java", path: "ai-code/extra/Voorbeeld.java", type: "file", size: 250, download_url: "https://raw.example/Voorbeeld.java" }
 ];
-win.fetch = async (url) => {
+const pushLog = { blobs: 0, treePaths: [], projectJson: "", refs: [], message: "" };
+win.fetch = async (url, init) => {
   const u = String(url);
+  const method = ((init && init.method) || "GET").toUpperCase();
+  let body = null;
+  try { body = init && init.body ? JSON.parse(init.body) : null; } catch (e) { body = null; }
+  // ── git-data API (push) ──
+  if (method === "PATCH" && u.includes("/git/refs/heads/")) {
+    pushLog.refs.push(body && body.sha);
+    return { ok: true, status: 200, json: async () => ({ object: { sha: body && body.sha } }) };
+  }
+  if (method === "POST" && u.includes("/git/blobs")) {
+    pushLog.blobs++;
+    return { ok: true, status: 201, json: async () => ({ sha: "blob" + pushLog.blobs }) };
+  }
+  if (method === "POST" && u.includes("/git/trees")) {
+    const tree = (body && body.tree) || [];
+    pushLog.treePaths = tree.map((e) => e.path);
+    const pj = tree.find((e) => e.path && e.path.endsWith("project.json"));
+    pushLog.projectJson = pj ? (pj.content || "") : "";
+    return { ok: true, status: 201, json: async () => ({ sha: "tree2" }) };
+  }
+  if (method === "POST" && u.includes("/git/commits")) {
+    pushLog.message = (body && body.message) || "";
+    return { ok: true, status: 201, json: async () => ({ sha: "commit2" }) };
+  }
+  if (method === "GET" && u.includes("/git/ref/heads/")) {
+    return { ok: true, status: 200, json: async () => ({ object: { sha: "head1" } }) };
+  }
+  if (method === "GET" && u.includes("/git/commits/head1")) {
+    return { ok: true, status: 200, json: async () => ({ sha: "head1", tree: { sha: "tree1" } }) };
+  }
+  // ── contents/raw (lezen) ──
   if (u.includes("/contents/")) {
     let entries = ghListing;
     if (u.includes("extra")) {
@@ -170,6 +201,24 @@ function ok(cond, msg) {
       }
     }
   } catch (e) { failures++; console.error("  ✘ github-flow: " + e.stack); }
+
+
+  // ── push-flow: alles naar GitHub ──
+  try {
+    p.github.token = "ghp_test_token";
+    const pushBtn = [...win.document.querySelectorAll("#view button")].find((b) => b.textContent.includes("Alles pushen"));
+    ok(!!pushBtn, "knop 'Alles pushen' aanwezig");
+    if (pushBtn) {
+      pushBtn.click();
+      await new Promise((r) => setTimeout(r, 700));
+      ok(pushLog.refs.length === 1, `branch-ref bijgewerkt (${pushLog.refs.length}x)`);
+      ok(pushLog.treePaths.some((pp) => pp.endsWith("project.json")), "project.json in gepushte boom");
+      ok(pushLog.treePaths.length > 25, `volledige boom: ${pushLog.treePaths.length} bestanden`);
+      ok(!pushLog.projectJson.includes("ghp_test_token"), "token niet in project.json (veilig)");
+      ok(pushLog.blobs >= 1, `textuur-PNG's via blobs-API (${pushLog.blobs})`);
+      ok(pushLog.message.includes("BlockyMod Studio"), "commitbericht aanwezig");
+    }
+  } catch (e) { failures++; console.error("  ✘ push-flow: " + e.stack); }
 
   // ── export-plan (zonder PNG-render in jsdom gaat alleen tekst) ──
   try {

@@ -1413,14 +1413,14 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ),
       el("div", { class: "grid2" },
         field("Map met AI-codes", textInput(gh.folder, (v) => { gh.folder = v.trim().replace(/^\/+|\/+$/g, ""); State.save(); }, { placeholder: "ai-code of mods/jouw-mod" })),
-        field("Token (optioneel, privé-repos)", textInput(gh.token, (v) => { gh.token = v; State.save(); }, { type: "password", placeholder: "ghp_... (alleen lokaal bewaard)" }))
+        field("Token (pushen & privé-repos)", textInput(gh.token, (v) => { gh.token = v; State.save(); }, { type: "password", placeholder: "ghp_... (alleen lokaal bewaard)" }))
       ),
-      el("div", { class: "inline-info small", text: "💡 Public repo? Dan is geen token nodig. Per mod een eigen map? Vul die in bij 'Map met AI-codes' (bv. mods/mijn-mod). Token alleen bij privé-repos – wordt lokaal bewaard." })
+      el("div", { class: "inline-info small", text: "💡 Lezen kan zonder token (publieke repo); pushen én privé-repos hebben de token nodig – die blijft alleen op deze computer. Per mod een eigen map? Vul die in bij 'Map met AI-codes' (bv. mods/mijn-mod/ai-code)." })
     ));
 
     // ── codes ophalen ──
     const browseCard = el("div", { class: "card" },
-      el("h3", { class: "card-title", text: "2 · Codes bekijken & ophalen" })
+      el("h3", { class: "card-title", text: "2 · Codes ophalen & alles pushen" })
     );
     const browseBody = el("div");
     browseCard.appendChild(browseBody);
@@ -1517,8 +1517,10 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     }
 
     browseCard.appendChild(el("div", { class: "row mt" },
-      el("button", { class: "mc-btn mc-btn-blue", text: "🔄 Map tonen bij GitHub", onclick: () => renderBrowse(State.ui.githubPath || "") })
+      el("button", { class: "mc-btn mc-btn-blue", text: "🔄 Map tonen bij GitHub", onclick: () => renderBrowse(State.ui.githubPath || "") }),
+      el("button", { class: "mc-btn mc-btn-green", text: "📤 Alles pushen naar GitHub", onclick: () => pushToGitHub() })
     ));
+    browseCard.appendChild(el("div", { class: "small dim mt", text: "📤 Push zet project.json + code + texturen in mods/" + p.meta.modId + "/ (één commit op branch " + (gh.branch || "main") + "). Heeft de token uit kaart 1 nodig." }));
     root.appendChild(browseCard);
 
     // ── ingevoegde bestanden ──
@@ -1609,6 +1611,56 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       });
     });
     return warnings;
+  }
+
+  async function pushToGitHub() {
+    const p = cur();
+    if (!p) { showCreateProject(); return; }
+    const gh = p.github;
+    if (!gh.owner || !gh.repo) {
+      toast("Vul eerst eigenaar + repo in (kaart 1).", "err");
+      return;
+    }
+    if (!gh.token || !gh.token.trim()) {
+      openModal("GitHub-token nodig", el("div", {},
+        el("p", { text: "Pushen (schrijven) kan niet zonder token. Eén keer instellen:" }),
+        el("pre", { class: "codeblock", text: "1. Open github.com \u2192 je avatar \u2192 Settings\n2. Links: Developer settings \u2192 Personal access tokens \u2192 Tokens (classic)\n3. Generate new token (classic) \u2192 noem hem bv. blockymod \u2192 vink 'repo' aan \u2192 Generate\n4. Kopieer de token (ghp_...) en plak hem hierboven in het veld Token" }),
+        el("p", { class: "dim small", text: "De token blijft alleen op deze computer en komt nooit in de push terecht." })
+      ), [{ label: "Begrepen", cls: "mc-btn-green", onClick: closeModal }]);
+      return;
+    }
+    const branch = gh.branch || "main";
+    const target = `mods/${p.meta.modId}`;
+    toast("Project wordt voorbereid...", "info");
+    try {
+      const { textFiles, textures } = Exporters.exportPlan(p);
+      const files = [];
+      const safe = Object.assign({}, p, { github: Object.assign({}, gh, { token: "" }) });
+      files.push({
+        path: target + "/project.json",
+        data: JSON.stringify({ format: "blockymod-studio/1", pushedAt: new Date().toISOString(), project: safe }, null, 2)
+      });
+      for (const [path, content] of Object.entries(textFiles)) {
+        files.push({ path: target + "/" + path, data: content });
+      }
+      let done = 0;
+      for (const job of textures) {
+        try {
+          files.push({ path: target + "/" + job.path, data: await job.render() });
+        } catch (err) {
+          console.warn("Textuur overslaan:", job.path, err);
+        }
+        done++;
+        if (done % 5 === 0) toast(`Texturen renderen... ${done}/${textures.length}`, "info");
+      }
+      toast(`Pushen naar ${branch}: ${files.length} bestanden...`, "info");
+      const res = await GitHubKit.pushFiles(gh, files,
+        `📦 ${p.meta.name} v${p.meta.version} – alles uit BlockyMod Studio (${files.length} bestanden)`);
+      toast(`${res.count} bestanden gepusht naar ${res.branch} in ${target}/ 🎉`, "ok");
+    } catch (err) {
+      console.error(err);
+      toast("Pushen mislukt: " + (err.message || err), "err");
+    }
   }
 
   async function exportMod() {

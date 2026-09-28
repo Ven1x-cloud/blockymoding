@@ -205,13 +205,6 @@ ${hook}
         }]
       };
     }
-    const supported = (e.slots === "armor")
-      ? "#minecraft:enchantable/armor"
-      : (e.slots === "any")
-        ? ["#minecraft:enchantable/weapon", "#minecraft:enchantable/armor"]
-        : (e.slots === "mainhand")
-          ? "#minecraft:enchantable/sword"
-          : "#minecraft:enchantable/weapon";
     return {
       description: { translate: `enchantment.${ns}.${e.id}` },
       weight: Math.max(1, e.weight || 10),
@@ -220,9 +213,23 @@ ${hook}
       max_cost: { base: 20, per_level_above_first: 8 },
       anvil_cost: 2,
       slots: [e.slots || "hand"],
-      supported_items: supported,
+      supported_items: `#${ns}:enchantable/${e.id}`,
       effects
     };
+  }
+
+  /** Waarden voor het item-tag van een enchant: vanilla-tag(s) + eigen mod-items. */
+  function enchantTagValues(p, e) {
+    const ns = p.meta.modId;
+    const vanilla = (e.slots === "armor")
+      ? ["#minecraft:enchantable/armor"]
+      : (e.slots === "any")
+        ? ["#minecraft:enchantable/weapon", "#minecraft:enchantable/armor"]
+        : (e.slots === "mainhand")
+          ? ["#minecraft:enchantable/sword"]
+          : ["#minecraft:enchantable/weapon"];
+    const modItems = (p.items || []).map((it) => `${ns}:${it.id}`);
+    return [...vanilla, ...modItems];
   }
 
   /** Java-klasse met enchantment-registratie voor yarn (1.20.1). */
@@ -230,12 +237,16 @@ ${hook}
     const ns = p.meta.modId;
     const fields = (p.enchants || []).map((e) => {
       const cn = constname(e.id);
-      const cat = e.slots === "armor" ? "EnchantmentCategory.ARMOR"
-        : e.slots === "any" ? "EnchantmentCategory.ALL"
-        : "EnchantmentCategory.WEAPON";
+      // ALL: de vanilla-categories (WEAPON/ARMOR) sluiten eigen mod-items uit;
+      // de EquipmentSlot-lijst filtert al op de juiste uitrustingsplek.
+      const cat = "EnchantmentCategory.ALL";
       const slots = e.slots === "armor"
         ? "EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET"
-        : "EquipmentSlot.MAINHAND";
+        : e.slots === "any"
+          ? "EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND, EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET"
+          : e.slots === "hand"
+            ? "EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND"
+            : "EquipmentSlot.MAINHAND";
       const maxLvl = Math.max(1, e.maxLevel || 3);
       const base = typeof e.base === "number" ? e.base : 1;
       const per = typeof e.perLevel === "number" ? e.perLevel : 0.5;
@@ -447,6 +458,8 @@ Triggers uit de app: ${chosen.length ? chosen.join(", ") : (m.behavior ? "gedrag
     for (const e of enchants) {
       if (isMojmap(p)) {
         put(`src/main/resources/data/${ns}/enchantment/${e.id}.json`, json(enchantJson(p, e)));
+        put(`src/main/resources/data/${ns}/tags/item/enchantable/${e.id}.json`, json({ values: enchantTagValues(p, e) }));
+        put(`src/main/resources/data/minecraft/tags/enchantment/in_enchanting_table.json`, json({ values: enchants.map((x) => `${ns}:${x.id}`) }));
       } else {
         put(`src/main/java/${pkgDir(p)}/ModEnchantments.java`, modEnchantmentsY(p));
         break; // één gedeelde registratie-klasse

@@ -167,6 +167,7 @@ const TextureKit = (() => {
     let color = "#5dbb4a";
     let drawing = false;
     let undoStack = [];
+    let redoStack = [];
     const scale = Math.max(8, Math.floor(256 / size));
 
     const canvas = el("canvas", { width: size * scale, height: size * scale });
@@ -245,7 +246,17 @@ const TextureKit = (() => {
       class: "mc-btn mc-btn-sm mc-btn-ghost", text: "↩ Ongedaan",
       onclick: () => {
         if (!undoStack.length) return;
+        redoStack.push(pixels.slice());
         pixels = undoStack.pop();
+        redraw(); emit();
+      }
+    });
+    const btnRedo = el("button", {
+      class: "mc-btn mc-btn-sm mc-btn-ghost", text: "↪ Opnieuw",
+      onclick: () => {
+        if (!redoStack.length) return;
+        undoStack.push(pixels.slice());
+        pixels = redoStack.pop();
         redraw(); emit();
       }
     });
@@ -259,7 +270,7 @@ const TextureKit = (() => {
     });
 
     tools.append(
-      el("div", { class: "tool-row" }, toolRow, btnUndo, btnClear),
+      el("div", { class: "tool-row" }, toolRow, btnUndo, btnRedo, btnClear),
       el("div", { class: "field" }, el("label", { text: "Kleur" }), palette, colorInput),
       el("div", { class: "field" },
         el("label", { text: "Snel-genereren" }),
@@ -293,6 +304,7 @@ const TextureKit = (() => {
     function pushUndo() {
       undoStack.push(pixels.slice());
       if (undoStack.length > 30) undoStack.shift();
+      redoStack = [];
     }
 
     function emit() { if (opts.onChange) opts.onChange(pixels.slice()); }
@@ -359,10 +371,57 @@ const TextureKit = (() => {
 
     return {
       redraw,
-      setPixels(p) { pixels = p.slice(); undoStack = []; redraw(); },
+      setPixels(p) { pixels = p.slice(); undoStack = []; redoStack = []; redraw(); },
       getPixels: () => pixels.slice()
     };
   }
 
-  return { PALETTE, generate, drawPixels, pixelsToCanvas, canvasToPngBytes, mountEditor, shade };
+  /** Meest voorkomende kleur uit pixels-array → hex (voor wapenlagen). */
+  function avgColor(pixels) {
+    const counts = new Map();
+    (pixels || []).forEach((c) => {
+      if (!c || typeof c !== "string") return;
+      counts.set(c, (counts.get(c) || 0) + 1);
+    });
+    let best = "#7d7d7d", n = -1;
+    counts.forEach((k, c) => { if (k > n) { n = k; best = c; } });
+    return best;
+  }
+
+  /** Vertical strip van meerdere 16×16 frames → PNG-bytes (geanimeerde icoon). */
+  function stripPng(frameArrays) {
+    const S = 16;
+    const cv = document.createElement("canvas");
+    cv.width = S; cv.height = S * frameArrays.length;
+    const ctx = cv.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    frameArrays.forEach((px, i) => {
+      ctx.drawImage(pixelsToCanvas(px, S), 0, i * S);
+    });
+    return canvasToPngBytes(cv);
+  }
+
+  /** Egaal gekleurd paneel met subtiele textuur (wapenlagen), η×η px. */
+  function armorPng(w, h, hex, variant) {
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = hex;
+    ctx.fillRect(0, 0, w, h);
+    const dark = shade(hex, -35), light = shade(hex, 30);
+    ctx.fillStyle = dark;
+    ctx.fillRect(0, h - Math.max(2, (h / 16) | 0), w, Math.max(2, (h / 16) | 0));
+    ctx.fillStyle = light;
+    ctx.fillRect(0, 0, w, Math.max(1, (h / 32) | 0));
+    const step = variant === 2 ? 8 : 6;
+    ctx.fillStyle = dark;
+    for (let x = step; x < w - 1; x += step * 2) {
+      for (let y = step; y < h - step; y += step * 2) {
+        ctx.fillRect(x, y, Math.max(1, (step / 3) | 0), Math.max(1, (step / 3) | 0));
+      }
+    }
+    return canvasToPngBytes(cv);
+  }
+
+  return { PALETTE, generate, drawPixels, pixelsToCanvas, canvasToPngBytes, mountEditor, shade, avgColor, stripPng, armorPng };
 })();

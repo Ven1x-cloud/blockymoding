@@ -97,7 +97,7 @@ win.fetch = async (url, init) => {
 win.navigator.clipboard = { writeText: async () => {} };
 
 // ── Scripts laden (als echte <script>-tags, zodat const-declaraties blijven hangen) ──
-const scripts = ["util.js", "zip.js", "state.js", "texture.js", "guidesign.js", "recipes.js", "exporters.js", "github.js", "app.js"];
+const scripts = ["util.js", "zip.js", "state.js", "texture.js", "soundlib.js", "guidesign.js", "recipes.js", "exporters.js", "github.js", "app.js"];
 win.addEventListener("error", (e) => errors.push("window.error: " + (e.error && e.error.stack || e.message)));
 
 for (const s of scripts) {
@@ -249,6 +249,23 @@ function ok(cond, msg) {
     await new Promise((r) => setTimeout(r, 80));
     const tm = win.document.querySelector("#view").textContent;
     ok(tm.includes("Gedrag-preset") && tm.includes("Bij spawn"), "mobs: gedrag + animatie-triggers zichtbaar");
+    ok(tm.includes("Geluid bij triggers") && tm.includes("Partikel bij triggers"), "mobs: geluid- + partikelselectie zichtbaar");
+    ok(tm.includes("3D-preview met animatie"), "mobs: 3D-preview met animatie zichtbaar");
+    State.ui.view = "items";
+    BMS.render();
+    await new Promise((r) => setTimeout(r, 80));
+    const ti2 = win.document.querySelector("#view").textContent;
+    ok(ti2.includes("Uitrusting (armor)"), "items: uitrustingskaart (3 weergaven) zichtbaar");
+    ok(ti2.includes("Animeer-frame") && ti2.includes("Ongedaan") && ti2.includes("Opnieuw"), "items: animatie-frames + ongedaan/opnieuw-knoppen");
+    State.ui.view = "story";
+    BMS.render();
+    await new Promise((r) => setTimeout(r, 80));
+    const ts = win.document.querySelector("#view").textContent;
+    ok(ts.includes("Geluiden") && ts.includes("Quests"), "verhaal: geluiden- + quests-kaart zichtbaar");
+    ok(ts.includes("➕ Quest") && ts.includes("▶ Piepje"), "verhaal: quest-knop + geluidsbibliotheek");
+    ok(!!win.document.querySelector("#btnImport"), "topbar: importeer-knop aanwezig");
+    const actSel = [...win.document.querySelectorAll("#view select")];
+    ok(ts.includes("Geluid afspelen") || actSel.length > 0, "verhaal: actie-keuze aanwezig");
   } catch (e) { failures++; console.error("  ✘ boost-ui: " + e.stack); }
 
   // ── nav-klikken ──

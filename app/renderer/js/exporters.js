@@ -33,6 +33,8 @@ const Exporters = (() => {
   }
   function lootDir(p) { return usesNewDirs(p) ? "loot_table" : "loot_tables"; }
   function recipesDir(p) { return usesNewDirs(p) ? "recipe" : "recipes"; }
+  function advDir(p) { return usesNewDirs(p) ? "advancement" : "advancements"; }
+  function functionsDir(p) { return usesNewDirs(p) ? "function" : "functions"; }
 
   /** 1.20.5+/26.x: data-componenten beschikbaar (glint, enchantable). */
   function hasComponents(p) {
@@ -45,16 +47,60 @@ const Exporters = (() => {
     return false;
   }
 
+  // ── Uitrusting (armor): 3 weergaven – inventaris-icoon, in de hand, op het lijf ──
+  const ARMOR_SLOTS = { helmet: "HELMET", chest: "CHESTPLATE", legs: "LEGGINGS", boots: "BOOTS" };
+  const ARMOR_HP = { helmet: 165, chest: 240, legs: 225, boots: 195 };
+  function isArmor(it) { return !!(it.armor && it.armor.slot && ARMOR_SLOTS[it.armor.slot]); }
+  function armorHp(it) { const d = it.maxDamage | 0; return d > 0 ? d : (ARMOR_HP[it.armor.slot] || 165); }
+  function armorDefense(it) { return (it.armor && (it.armor.defense | 0)) || 3; }
+
+  /** ArmorMaterial-record voor 26.x (mojmap) – reparatie-tag + equipment-asset. */
+  function armorMaterialM(p, it, hp) {
+    const ns = p.meta.modId;
+    const def = armorDefense(it);
+    const map = Object.entries(ARMOR_SLOTS)
+      .map(([k, v]) => `net.minecraft.world.item.ArmorType.${v}, ${k === it.armor.slot ? def : 0}`)
+      .join(", ");
+    const ench = (it.enchantability | 0) || 0;
+    return `new net.minecraft.world.item.ArmorMaterial(${hp}, java.util.Map.of(${map}), ${ench}, `
+      + `net.minecraft.sounds.SoundEvents.ARMOR_EQUIP_IRON, 0.0F, 0.0F, `
+      + `net.minecraft.tags.TagKey.create(net.minecraft.core.registries.BuiltInRegistries.ITEM.key(), `
+      + `net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("${ns}", "repairs_${it.id}")), `
+      + `net.minecraft.resources.ResourceKey.create(net.minecraft.world.item.equipment.EquipmentAssets.ROOT_ID, `
+      + `net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("${ns}", "${it.id}")))`;
+  }
+
+  /** Anonieme ArmorMaterial voor yarn (1.20.1). */
+  function armorMaterialY(p, it, hp) {
+    const ns = p.meta.modId;
+    const def = armorDefense(it);
+    const ench = (it.enchantability | 0) || 0;
+    return `new net.minecraft.item.ArmorMaterial() {
+        @Override public int getDurability(net.minecraft.item.ArmorItem.Type type) { return ${hp}; }
+        @Override public int getProtection(net.minecraft.item.ArmorItem.Type type) { return ${def}; }
+        @Override public int getEnchantability() { return ${ench}; }
+        @Override public net.minecraft.sound.SoundEvent getEquipSound() { return net.minecraft.sound.SoundEvents.ITEM_ARMOR_EQUIP_IRON; }
+        @Override public net.minecraft.recipe.Ingredient getRepairIngredient() { return net.minecraft.recipe.Ingredient.ofItems(net.minecraft.item.Items.IRON_INGOT); }
+        @Override public String getName() { return "${ns}:${it.id}"; }
+        @Override public float getToughness() { return 0.0F; }
+        @Override public float getKnockbackResistance() { return 0.0F; }
+    }`;
+  }
+
   /** Item-properties keten voor officiële Mojang-mappings (26.x). */
-  function itemPropsM(it) {
+  function itemPropsM(p, it) {
     const bits = [];
     const dmg = it.maxDamage | 0;
     if (dmg > 0) bits.push(`maxDamage(${dmg})`);
+    else if (isArmor(it)) bits.push(`maxDamage(${armorHp(it)})`);
     else if ((it.maxStack || 64) !== 1) bits.push(`stacksTo(${it.maxStack || 64})`);
     if (it.rarity) bits.push(`rarity(net.minecraft.world.item.Rarity.${String(it.rarity).toUpperCase()})`);
     if (it.fireproof) bits.push("fireResistant()");
     if (it.glint) bits.push("component(net.minecraft.core.component.DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)");
     if ((it.enchantability | 0) > 0) bits.push(`enchantable(${it.enchantability | 0})`);
+    if (isArmor(it)) {
+      bits.push(`humanoidArmor(${armorMaterialM(p, it, armorHp(it))}, net.minecraft.world.item.ArmorType.${ARMOR_SLOTS[it.armor.slot]})`);
+    }
     return bits.length ? "." + bits.join(".") : "";
   }
 
@@ -87,17 +133,55 @@ const Exporters = (() => {
   }
 
   /** Animatie-trigger-haksels + aiStep/tickMovement-hook in de entity-klasse. */
-  function triggersBlock(m, flavor) {
+  const PARTICLE_CONSTS = {
+    flame: "FLAME", smoke: "SMOKE", heart: "HEART", crit: "CRIT", enchanted_hit: "ENCHANTED_HIT",
+    happy_villager: "HAPPY_VILLAGER", angry_villager: "ANGRY_VILLAGER", end_rod: "END_ROD",
+    snowflake: "SNOWFLAKE", electric_spark: "ELECTRIC_SPARK", portal: "PORTAL",
+    underwater: "UNDERWATER", note: "NOTE", witch: "WITCH", slime: "SLIME"
+  };
+
+  /** Verwijzing naar een geluid-event: vanilla SoundEvents of eigen ModSounds. */
+  function triggerSoundRef(p, m, flavor) {
+    const moj = flavor === "mojmap";
+    const v = m.triggerSound || "";
+    if (v.startsWith("mod:")) return `ModSounds.${constname(v.slice(4))}`;
+    if (v.startsWith("vanilla:")) {
+      const n = v.slice(8);
+      return moj ? `net.minecraft.sounds.SoundEvents.${n}` : `net.minecraft.sound.SoundEvents.${n}`;
+    }
+    return moj ? "net.minecraft.sounds.SoundEvents.ENTITY_PIG_AMBIENT" : "net.minecraft.sound.SoundEvents.ENTITY_PIG_AMBIENT";
+  }
+
+  /** Partikel-regel die op de serverkant draait (beide mappings). */
+  function particleBlock(m, flavor) {
+    const id = m.triggerParticle || "";
+    if (!id) return "";
+    const c = PARTICLE_CONSTS[id] || id.toUpperCase();
+    const pt = flavor === "mojmap" ? "net.minecraft.core.particles.ParticleTypes" : "net.minecraft.particle.ParticleTypes";
+    if (flavor === "mojmap") {
+      return `
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel bmSl) {
+            bmSl.sendParticles(${pt}.${c}, this.getX(), this.getY() + 1.0D, this.getZ(), 0.3D, 0.3D, 0.3D, 0.05D, 12);
+        }`;
+    }
+    return `
+        if (this.getWorld() instanceof net.minecraft.server.world.ServerWorld bmSw) {
+            bmSw.spawnParticles(${pt}.${c}, this.getX(), this.getY() + 1.0D, this.getZ(), 0.3D, 0.3D, 0.3D, 0.05D, 12);
+        }`;
+  }
+
+  function triggersBlock(p, m, flavor) {
     const ids = m.triggers || [];
-    if (!ids.length) return "";
+    if (!ids.length && !(m.triggerParticle || "") && !(m.triggerSound || "")) return "";
     const moj = flavor === "mojmap";
     const tick = moj ? "this.tickCount" : "this.age";
-    const ambient = moj ? "net.minecraft.sounds.SoundEvents.ENTITY_PIG_AMBIENT" : "net.minecraft.sound.SoundEvents.ENTITY_PIG_AMBIENT";
+    const ambient = triggerSoundRef(p, m, flavor);
+    const part = particleBlock(m, flavor);
     const L = [];
     if (ids.includes("spawn")) {
       L.push(`        if (${tick} == 1) {
-            // 🌀 SPAWN: start-effect (voorbeeld: geluidje) – vervang door jouw animatie!
-            this.playSound(${ambient}, 1.0F, 1.3F);
+            // 🌀 SPAWN: start-effect (geluid/partikel) – vervang door jouw animatie!
+            this.playSound(${ambient}, 1.0F, 1.3F);${part}
         }`);
     }
     if (ids.includes("attack")) {
@@ -111,7 +195,7 @@ const Exporters = (() => {
     }
     if (ids.includes("timer")) {
       L.push(`        if (${tick} % 100 == 0) {
-            // ⏱ ELKE 5 SECONDEN: periodiek animatie-effect
+            // ⏱ ELKE 5 SECONDEN: periodiek animatie-effect${part}
         }`);
     }
     if (ids.includes("lowhp")) {
@@ -230,6 +314,84 @@ ${hook}
           : ["#minecraft:enchantable/weapon"];
     const modItems = (p.items || []).map((it) => `${ns}:${it.id}`);
     return [...vanilla, ...modItems];
+  }
+
+  /** ModSounds: registreert eigen geluid-events (playsound + triggers). */
+  function modSounds(p) {
+    const ns = p.meta.modId;
+    const lines = (p.sounds || []).map((s) =>
+      `    public static final net.minecraft.${isMojmap(p) ? "sounds" : "sound"}.SoundEvent ${constname(s.id)} = register("${s.id}"); // ${s.naam || s.id}`);
+    if (isMojmap(p)) {
+      return `package ${javaPackage(p)};
+
+/** Eigen geluiden – gegenereerd door BlockyMod Studio (sounds.json + .ogg). */
+public final class ModSounds {
+    private ModSounds() {}
+
+${lines.join("\n")}
+
+    public static void register() {
+        // klassen-lading hierboven registreert alle geluiden
+    }
+
+    private static net.minecraft.sounds.SoundEvent register(String name) {
+        net.minecraft.resources.ResourceLocation id =
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("${ns}", name);
+        return net.minecraft.core.Registry.register(
+                net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT, id,
+                net.minecraft.sounds.SoundEvent.createVariableRangeEvent(id));
+    }
+}`;
+    }
+    return `package ${javaPackage(p)};
+
+/** Eigen geluiden – gegenereerd door BlockyMod Studio (sounds.json + .ogg). */
+public final class ModSounds {
+    private ModSounds() {}
+
+${lines.join("\n")}
+
+    public static void register() {
+        // klassen-lading hierboven registreert alle geluiden
+    }
+
+    private static net.minecraft.sound.SoundEvent register(String name) {
+        net.minecraft.util.Identifier id = net.minecraft.util.Identifier.of("${ns}", name);
+        return net.minecraft.registry.Registry.register(
+                net.minecraft.registry.Registry.SOUND_EVENT, id,
+                net.minecraft.sound.SoundEvent.of(id));
+    }
+}`;
+  }
+
+  /** Advancement/quest-JSON (werkbaar op 1.20.1 én 26.x). */
+  function questJson(p, q) {
+    const ns = p.meta.modId;
+    let criteria;
+    if (q.type === "item") {
+      criteria = { start: { trigger: "minecraft:inventory_changed", conditions: { items: [{ id: q.itemId || "minecraft:diamond" }] } } };
+    } else if (q.type === "kill") {
+      criteria = { start: { trigger: "minecraft:player_killed_entity", conditions: { entity: { type: q.entityId || "minecraft:zombie" } } } };
+    } else {
+      criteria = { start: { trigger: "minecraft:tick" } };
+    }
+    const rewards = {};
+    if ((q.xp | 0) > 0) rewards.experience = q.xp | 0;
+    if ((q.cmd || "").trim()) rewards.function = `${ns}:${q.id}_reward`;
+    const out = {
+      display: {
+        icon: { id: q.icon || "minecraft:stone" },
+        title: q.title || q.id,
+        description: q.desc || "",
+        frame: ["goal", "challenge"].includes(q.frame) ? q.frame : "task",
+        background: "minecraft:textures/gui/advancements/backgrounds/stone.png",
+        show_toast: true,
+        announce_to_chat: true
+      },
+      criteria
+    };
+    if (Object.keys(rewards).length) out.rewards = rewards;
+    return out;
   }
 
   /** Java-klasse met enchantment-registratie voor yarn (1.20.1). */
@@ -466,6 +628,47 @@ Triggers uit de app: ${chosen.length ? chosen.join(", ") : (m.behavior ? "gedrag
       }
     }
 
+    // ── Uitrusting (armor): equipment-asset (26.x) + reparatie-tag ──
+    for (const it of p.items) {
+      if (!isArmor(it)) continue;
+      if (isMojmap(p)) {
+        put(`src/main/resources/assets/${ns}/equipment/${it.id}.json`, json({
+          layers: {
+            humanoid: [{ texture: `${ns}:${it.id}` }],
+            humanoid_leggings: [{ texture: `${ns}:${it.id}` }]
+          }
+        }));
+        put(`src/main/resources/data/${ns}/tags/item/repairs_${it.id}.json`, json({ values: ["minecraft:iron_ingot"] }));
+      }
+    }
+    // geanimeerde icoon → mcmeta (inventaris én in de hand)
+    for (const it of p.items) {
+      if (it.frames && it.frames.length) {
+        put(`src/main/resources/assets/${ns}/textures/item/${it.id}.mcmeta`, json({ animation: { frametime: 10 } }));
+      }
+    }
+
+    // ── Geluiden ──
+    const sounds = p.sounds || [];
+    if (sounds.length) {
+      const sj = {};
+      for (const s of sounds) {
+        sj[`${ns}:${s.id}`] = { subtitle: `subtitles.${ns}.${s.id}`, sounds: [{ name: `${ns}:${s.id}` }] };
+      }
+      put(`src/main/resources/assets/${ns}/sounds.json`, json(sj));
+      put(`src/main/java/${pkgDir(p)}/ModSounds.java`, modSounds(p));
+    }
+
+    // ── Quests (advancements) ──
+    for (const q of (p.quests || [])) {
+      put(`src/main/resources/data/${ns}/${advDir(p)}/${q.id}.json`, json(questJson(p, q)));
+      const fn = (q.cmd || "").trim();
+      if (fn) {
+        put(`src/main/resources/data/${ns}/${functionsDir(p)}/${q.id}_reward.mcfunction`,
+          fn.split("\n").map((l) => l.replace(/^\/+/, "")).join("\n") + "\n");
+      }
+    }
+
     // ── Recepten ──
     p.workstations.forEach((w) => {
       (w.recipes || []).forEach((r, i) => {
@@ -686,6 +889,7 @@ archives_base_name=${p.meta.modId}
   function modMain(p) {
     if (isMojmap(p)) return modMainM(p);
     const story = p.story.chapters.length ? "        story.StoryEvents.register();\n" : "";
+    const snd = (p.sounds && p.sounds.length) ? "        ModSounds.register();\n" : "";
     return `package ${javaPackage(p)};
 
 import net.fabricmc.api.ModInitializer;
@@ -709,7 +913,7 @@ public class ModMain implements ModInitializer {
         ModBlocks.register();
         ModItems.register();
         ModEntities.register();
-${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${(p.enchants && p.enchants.length) ? "        ModEnchantments.register();\n" : ""}${story}
+${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${(p.enchants && p.enchants.length) ? "        ModEnchantments.register();\n" : ""}${snd}${story}
         LOGGER.info("[{}] geïnitialiseerd – veel bouwplezier!", MOD_ID);
     }
 }
@@ -791,6 +995,12 @@ ${regs || "        // niets te registreren"}
     for (const it of p.items) {
       const c = byId.get(it.id);
       const settings = itemSettings(p);
+      if (isArmor(it)) {
+        const hp = armorHp(it);
+        fields += `    public static final Item ${c} = new ArmorItem(${armorMaterialY(p, it, hp)}, ArmorItem.Type.${ARMOR_SLOTS[it.armor.slot]}, ${settings}.maxDamage(${hp}));\n`;
+        regs += `        Registry.register(Registries.ITEM, ModMain.id("${it.id}"), ${c});\n`;
+        continue;
+      }
       const bits = [];
       const dmg = it.maxDamage | 0;
       if (dmg > 0) bits.push(`maxDamage(${dmg})`);
@@ -809,7 +1019,8 @@ ${regs || "        // niets te registreren"}
 
     const imports = new Set(["import net.minecraft.item.BlockItem;",
       "import net.minecraft.item.Item;", "import net.minecraft.registry.Registries;",
-      "import net.minecraft.registry.Registry;"]);
+      "import net.minecraft.registry.Registry;",
+      "import net.minecraft.item.ArmorItem;", "import net.minecraft.item.ArmorMaterial;"]);
     if (p.mobs.length) imports.add("import net.minecraft.item.SpawnEggItem;");
     if (!is121(p)) imports.add("import net.fabricmc.fabric.api.item.v1.FabricItemSettings;");
 
@@ -888,7 +1099,7 @@ ${regs}
   function entityClass(p, m) {
     if (isMojmap(p)) return entityClassM(p, m);
     const goalsY = behaviorGoals(m, "yarn");
-    const trigY = triggersBlock(m, "yarn");
+    const trigY = triggersBlock(p, m, "yarn");
     const cn = classname(m.id);
     const gui = m.guiId ? getGuiP(p, m.guiId) : null;
     const guiHandler = gui ? classname(gui.id) + "ScreenHandler" : null;
@@ -1389,6 +1600,10 @@ ${renderRegs || "        // geen mobs om te registreren"}
       en[`enchantment.${ns}.${e.id}`] = e.name || e.id;
       nl[`enchantment.${ns}.${e.id}`] = e.name || e.id;
     }
+    for (const s of (p.sounds || [])) {
+      en[`subtitles.${ns}.${s.id}`] = s.naam || s.id;
+      nl[`subtitles.${ns}.${s.id}`] = s.naam || s.id;
+    }
     return { en, nl };
   }
 
@@ -1660,6 +1875,8 @@ public final class StoryManager {
                             .executeWithPrefix(player.getCommandSource(), getStr(a, "cmd", "say hallo"));
                 }
             }
+            case "geluid" -> runCommand(player, "playsound " + getStr(a, "sound", "minecraft:block.note_block.pling") + " master @s ~ ~ ~ " + getStr(a, "volume", "1") + " " + getStr(a, "pitch", "1"));
+            case "partikel" -> runCommand(player, "particle " + getStr(a, "particle", "minecraft:flame") + " ~ ~1 ~ 0.2 0.5 0.2 0.02 " + (a.has("count") ? a.get("count").getAsInt() : 20));
             case "gui" -> openGui(player, getStr(a, "gui", ""));
             case "next" -> {
                 Progress pr = getProgress(player.getUuid());
@@ -1829,6 +2046,7 @@ archives_base_name=${p.meta.modId}
     const gui = p.guis.length ? "        gui.ModScreenHandlers.initialize();\n" : "";
     const creative = "        CreativeTab.initialize(); // ⚠️ zie CreativeTab.java\n";
     const story = p.story.chapters.length ? "        story.StoryEvents.register();\n" : "";
+    const snd = (p.sounds && p.sounds.length) ? "        ModSounds.register();\n" : "";
     return `package ${javaPackage(p)};
 
 import net.fabricmc.api.ModInitializer;
@@ -1853,7 +2071,7 @@ public class ModMain implements ModInitializer {
         ModBlocks.initialize();
         ModItems.initialize();
         ModEntities.initialize();
-${gui}${creative}${story}
+${gui}${creative}${snd}${story}
         LOGGER.info("[{}] geïnitialiseerd – veel bouwplezier!", MOD_ID);
     }
 }
@@ -1922,7 +2140,7 @@ ${p.blocks.length ? (regs || "        // geladen via statische velden") : "     
       `    public static final BlockItem ${constname(b.id)} = registerBlockItem("${b.id}", ModBlocks.${constname(b.id)});`
     ).join("\n");
     const plainItems = p.items.map((it) =>
-      `    public static final Item ${constname(it.id)} = registerItem("${it.id}", props -> new Item(props${itemPropsM(it)}));`
+      `    public static final Item ${constname(it.id)} = registerItem("${it.id}", props -> new Item(props${itemPropsM(p, it)}));`
     ).join("\n");
     const eggs = p.mobs.map((m) =>
       `    public static final Item ${constname(m.id)}_SPAWN_EGG = registerItem("${m.id}_spawn_egg",
@@ -2021,7 +2239,7 @@ ${p.mobs.length ? attrs : "        // niets te registreren"}
 
   function entityClassM(p, m) {
     const goalsM = behaviorGoals(m, "mojmap");
-    const trigM = triggersBlock(m, "mojmap");
+    const trigM = triggersBlock(p, m, "mojmap");
     const cn = classname(m.id);
     const gui = m.guiId ? getGuiP(p, m.guiId) : null;
     const guiMenu = gui ? classname(gui.id) + "Menu" : null;
@@ -2691,6 +2909,8 @@ public final class StoryManager {
                 }
             }
             case "command" -> runCommand(player, getStr(a, "cmd", "say hallo"));
+            case "geluid" -> runCommand(player, "playsound " + getStr(a, "sound", "minecraft:block.note_block.pling") + " master @s ~ ~ ~ " + getStr(a, "volume", "1") + " " + getStr(a, "pitch", "1"));
+            case "partikel" -> runCommand(player, "particle " + getStr(a, "particle", "minecraft:flame") + " ~ ~1 ~ 0.2 0.5 0.2 0.02 " + (a.has("count") ? a.get("count").getAsInt() : 20));
             case "gui" -> openGui(player, getStr(a, "gui", ""));
             case "next" -> {
                 Progress pr = getProgress(player.getUuid());
@@ -2805,7 +3025,48 @@ public final class StoryEvents {
           if (!px || !px.some(Boolean)) {
             px = TextureKit.generate(it.genStyle || "ruis", it.genColor || "#b87333", hashStr(it.id));
           }
+          if (it.frames && it.frames.length) {
+            return TextureKit.stripPng([px, ...it.frames]); // geanimeerde icoon
+          }
           return TextureKit.canvasToPngBytes(TextureKit.pixelsToCanvas(px, 16));
+        }
+      });
+    }
+    // wapenlagen (equipped-variant): 26.x → equipment-texturen, 1.20.1 → models/armor
+    for (const it of p.items) {
+      if (!isArmor(it)) continue;
+      const colorOf = () => TextureKit.avgColor(it.pixels);
+      if (isMojmap(p)) {
+        jobs.push({
+          path: `src/main/resources/assets/${ns}/textures/entity/equipment/humanoid/${it.id}.png`,
+          render: async () => TextureKit.armorPng(64, 64, colorOf(), 1)
+        });
+        jobs.push({
+          path: `src/main/resources/assets/${ns}/textures/entity/equipment/humanoid_leggings/${it.id}.png`,
+          render: async () => TextureKit.armorPng(64, 64, colorOf(), 2)
+        });
+      } else {
+        jobs.push({
+          path: `src/main/resources/assets/${ns}/textures/models/armor/${it.id}_layer_1.png`,
+          render: async () => TextureKit.armorPng(64, 32, colorOf(), 1)
+        });
+        jobs.push({
+          path: `src/main/resources/assets/${ns}/textures/models/armor/${it.id}_layer_2.png`,
+          render: async () => TextureKit.armorPng(64, 32, colorOf(), 2)
+        });
+      }
+    }
+    // geluiden (OGG uit de bibliotheek)
+    for (const snd of (p.sounds || [])) {
+      jobs.push({
+        path: `src/main/resources/assets/${ns}/sounds/${snd.id}.ogg`,
+        render: async () => {
+          const lib = (typeof SoundLib !== "undefined" && SoundLib[snd.lib]) || null;
+          if (!lib) throw new Error("Onbekend geluid: " + snd.lib);
+          const bin = atob(lib.b64);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          return arr;
         }
       });
     }

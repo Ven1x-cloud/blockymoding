@@ -100,6 +100,27 @@ officiële Mojang-mappings, Java 25). Optioneel ook **1.20.1 / 1.21.1** (Yarn, J
   export bevat kant-en-klare hook-code in de entity-klasse én een
   prompt-bestand `ai-code/animaties/<mob>.md` dat je zo aan de AI geeft.
 
+## 🛡️ Nieuw: uitrusting, geluiden, quests, import & meer
+
+- **Uitrusting (armor)** – kies per item een draagpositie (helm/borst/broek/laarzen).
+  Drie weergaven zijn geregeld: ① inventaris-icoon (met optionele animatie tot
+  4 frames), ② in de hand (andere spelers zien het ook), ③ op het lijf – de app
+  genereert automatisch de wapenlagen én het uitrustings-asset. 26.3 krijgt de
+  `equippable`-route via `humanoidArmor(...)`, 1.20.1 een echte `ArmorItem`.
+- **🔊 Geluiden** – acht kant-en-klare geluiden (beluister ze met ▶), als .ogg
+  + `sounds.json` + Java-event in je mod. Bruikbaar in verhaal-acties én mob-triggers.
+- **✨ Partikels** – nieuwe verhaal-actie én mob-trigger-optie (vlam, rook,
+  hartjes, sneeuw…) – rechtstreeks in de Java-code.
+- **🏆 Quests** – advancements met soort (direct / item / mob verslaan), icoon,
+  kader, XP- en commando-beloning. Minecraft toont ze als prestatie met toast.
+- **↩️ Ongedaan / ↪️ Opnieuw** – in elke textuur-editor (ook toetsenbord-vriendelijk
+  gedrag blijft).
+- **📂 Importeer mod** – knop in de topbalk: laad een eerder geëxporteerde ZIP
+  (met `project.json`) en je hele project inclusief texturen komt terug.
+- **🧊 Mob-3D-preview** – draaiende kop + loop-ende poten in de mob-kaart
+  (voorvertoning; in-game-animaties komen via `ai-code/animaties/`).
+- **Blok-3D-weergave verbeterd** – groter, lichter en contrastrijker.
+
 ## 📤 Alles naar GitHub (knop)
 
 Knop **📤 Alles pushen naar GitHub** (tab 🤖 AI-code / GitHub) zet in **één

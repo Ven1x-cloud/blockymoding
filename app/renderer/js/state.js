@@ -65,6 +65,8 @@ const State = (() => {
       mobs: [],
       story: { chapters: [] },
       enchants: [],
+      sounds: [],
+      quests: [],
       aiFiles: []
     };
   }
@@ -106,6 +108,29 @@ const State = (() => {
       bgColor: "#C6C6C6",
       elements: defaultCraftingElements(name)
     };
+  }
+
+  /** Importeer een project-object (uit zip/project.json) met unieke modId. */
+  function importProject(raw) {
+    if (!raw || typeof raw !== "object" || !raw.meta || !raw.meta.name) {
+      throw new Error("Dit bestand bevat geen BlockyMod-Studio-project.");
+    }
+    const copy = clone(raw);
+    // nieuwere sleutels altijd aanwezig (oudere projecten)
+    copy.sounds = copy.sounds || [];
+    copy.quests = copy.quests || [];
+    copy.enchants = copy.enchants || [];
+    copy.github = copy.github || { owner: "", repo: "", branch: "main", folder: "ai-code", token: "" };
+    if (copy.github) copy.github.token = ""; // token nooit importeren
+    copy.meta.created = Date.now();
+    let key = sanitizeId(copy.meta.modId || copy.meta.name);
+    let n = 2;
+    while (store.projects[key]) key = sanitizeId(copy.meta.modId || copy.meta.name) + "_import" + (n++);
+    copy.meta.modId = key;
+    store.projects[key] = copy;
+    store.currentId = key;
+    saveNow();
+    return copy;
   }
 
   // ── Projectbeheer ──
@@ -203,7 +228,7 @@ const State = (() => {
   return {
     load, save, saveNow,
     get ui() { return ui; },
-    listProjects, createProject, duplicateProject, removeProject, switchTo, current,
+    listProjects, createProject, duplicateProject, removeProject, switchTo, current, importProject,
     getGui, getBlock, getItem, resolveItemId,
     defaultCraftingElements, defaultGui, emptyPixels
   };

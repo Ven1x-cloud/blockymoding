@@ -129,7 +129,80 @@ const Zip = (() => {
     return out;
   }
 
-  return { build, crc32, encodeUtf8 };
+
+  /** Snel: lees een ZIP met alleen STORE-vulling (onze eigen exports). */
+  function readSync(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65558); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error("Geen geldig ZIP-bestand.");
+    const count = dv.getUint16(eocd + 10, true);
+    let pos = dv.getUint32(eocd + 16, true);
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      if (dv.getUint32(pos, true) !== 0x02014b50) break;
+      const method = dv.getUint16(pos + 10, true);
+      const csize = dv.getUint32(pos + 20, true);
+      const nameLen = dv.getUint16(pos + 28, true);
+      const extraLen = dv.getUint16(pos + 30, true);
+      const cmtLen = dv.getUint16(pos + 32, true);
+      const lho = dv.getUint32(pos + 42, true);
+      const name = new TextDecoder().decode(bytes.subarray(pos + 46, pos + 46 + nameLen));
+      pos += 46 + nameLen + extraLen + cmtLen;
+      const lNameLen = dv.getUint16(lho + 26, true);
+      const lExtraLen = dv.getUint16(lho + 28, true);
+      const start = lho + 30 + lNameLen + lExtraLen;
+      if (method !== 0) throw new Error("ZIP-methode " + method + " alleen met read(): " + name);
+      out.push({ path: name, data: bytes.subarray(start, start + csize).slice() });
+    }
+    if (!out.length) throw new Error("ZIP bevat geen bestanden.");
+    return out;
+  }
+
+  /** Lees een ZIP (STORE + DEFLATE) → [{path, data:Uint8Array}]. */
+  async function read(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65558); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error("Geen geldig ZIP-bestand.");
+    const count = dv.getUint16(eocd + 10, true);
+    let pos = dv.getUint32(eocd + 16, true);
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      if (dv.getUint32(pos, true) !== 0x02014b50) break;
+      const method = dv.getUint16(pos + 10, true);
+      const csize = dv.getUint32(pos + 20, true);
+      const nameLen = dv.getUint16(pos + 28, true);
+      const extraLen = dv.getUint16(pos + 30, true);
+      const cmtLen = dv.getUint16(pos + 32, true);
+      const lho = dv.getUint32(pos + 42, true);
+      const name = new TextDecoder().decode(bytes.subarray(pos + 46, pos + 46 + nameLen));
+      pos += 46 + nameLen + extraLen + cmtLen;
+      const lNameLen = dv.getUint16(lho + 26, true);
+      const lExtraLen = dv.getUint16(lho + 28, true);
+      const start = lho + 30 + lNameLen + lExtraLen;
+      const raw = bytes.subarray(start, start + csize);
+      let data;
+      if (method === 0) {
+        data = raw.slice();
+      } else if (method === 8) {
+        const ds = new DecompressionStream("deflate-raw");
+        const stream = new Blob([raw]).stream().pipeThrough(ds);
+        data = new Uint8Array(await new Response(stream).arrayBuffer());
+      } else {
+        throw new Error("ZIP-methode " + method + " wordt niet ondersteund: " + name);
+      }
+      out.push({ path: name, data });
+    }
+    if (!out.length) throw new Error("ZIP bevat geen bestanden.");
+    return out;
+  }
+
+  return { build, read, readSync, crc32, encodeUtf8 };
 })();
 
 // Node-testcompatibiliteit (wordt in de browser genegeerd)

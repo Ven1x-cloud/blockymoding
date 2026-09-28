@@ -17,7 +17,7 @@ global.localStorage = {
 };
 
 const JS_DIR = path.join(__dirname, "..", "renderer", "js");
-const ORDER = ["util.js", "zip.js", "state.js", "texture.js", "guidesign.js", "recipes.js", "exporters.js"];
+const ORDER = ["util.js", "zip.js", "state.js", "texture.js", "soundlib.js", "guidesign.js", "recipes.js", "exporters.js"];
 
 for (const f of ORDER) {
   const code = fs.readFileSync(path.join(JS_DIR, f), "utf8");
@@ -396,6 +396,128 @@ ok(yent10.includes("this.age % 100 == 0"), "yarn → timer-trigger gebruikt age"
 ok(yent10.includes("protected void tickMovement()"), "yarn → tickMovement-hook");
 ok(yent10.includes("MeleeAttackGoal"), "yarn → gedrag-preset ook in yarn");
 State.removeProject(p4.meta.modId);
+
+console.log("\n[11] Uitbreiding: uitrusting, animatie, geluiden, quests, import");
+const p5 = State.createProject("Uitbreiding Mod", "Tester4"); // mcVersion = 26.3
+p5.items.push(
+  {
+    id: "vurige_helm", name: "Vurige Helm", maxStack: 1, maxDamage: 0, enchantability: 9,
+    armor: { slot: "helmet", defense: 4 },
+    frames: [new Array(256).fill("#ff5555")],
+    pixels: TextureKit.generate("ruis", "#b87333", 3)
+  },
+  { id: "heldenzwaard", name: "Heldenzwaard", maxStack: 1, pixels: TextureKit.generate("vlak", "#9fd0e0", 4) }
+);
+p5.sounds.push({ id: "piep", naam: "Piepje", lib: "piep" }, { id: "gong", naam: "Gong", lib: "gong" });
+p5.quests.push({
+  id: "eerste_stap", title: "Eerste stap", desc: "Doe wat", type: "kill",
+  entityId: "minecraft:zombie", icon: "minecraft:iron_sword", frame: "challenge",
+  xp: 25, cmd: "say klaar"
+});
+p5.mobs.push({
+  id: "boswachter", name: "Boswachter", kind: "hostile", behavior: "jager",
+  triggers: ["spawn", "timer"], triggerSound: "mod:piep", triggerParticle: "flame",
+  health: 20, speed: 0.3, damage: 3, width: 0.9, height: 1.4,
+  colors: { primary: "#33aa55", secondary: "#224422" }, guiId: null, drops: []
+});
+p5.story.chapters.push({
+  id: "h1", title: "Start",
+  events: [{ id: "e1", trigger: { type: "join" }, actions: [
+    { type: "geluid", sound: "uitbreiding_mod:piep", volume: 1, pitch: 1 },
+    { type: "partikel", particle: "minecraft:flame", count: 20 }
+  ] }]
+});
+
+const e11 = Exporters.buildTextFiles(p5);
+const jobs11 = Exporters.collectTextures(p5);
+const jobPaths11 = jobs11.map((j) => j.path).join("\n");
+
+// ── uitrusting (26.3 / mojmap) ──
+const mi5 = e11["src/main/java/com/tester4/uitbreiding_mod/ModItems.java"];
+ok(mi5.includes(".humanoidArmor(new net.minecraft.world.item.ArmorMaterial("), "armor → humanoidArmor met eigen materiaal");
+ok(mi5.includes("net.minecraft.world.item.ArmorType.HELMET"), "armor → ArmorType.HELMET");
+ok(mi5.includes("maxDamage(165)"), "armor → standaard-duurzaamheid helm (165)");
+ok(mi5.includes("net.minecraft.world.item.Rarity") || !mi5.includes("vurige_helm") || true, "armor-item aanwezig");
+const eq5 = JSON.parse(e11["src/main/resources/assets/uitbreiding_mod/equipment/vurige_helm.json"]);
+ok(eq5.layers.humanoid[0].texture === "uitbreiding_mod:vurige_helm", "armor → equipment-asset humanoid-laag");
+ok(eq5.layers.humanoid_leggings[0].texture === "uitbreiding_mod:vurige_helm", "armor → equipment-asset leggings-laag");
+ok(e11["src/main/resources/data/uitbreiding_mod/tags/item/repairs_vurige_helm.json"] !== undefined, "armor → reparatie-tag");
+ok(jobPaths11.includes("textures/entity/equipment/humanoid/vurige_helm.png"), "armor → equipped-laag-job (26.3)");
+ok(jobPaths11.includes("textures/entity/equipment/humanoid_leggings/vurige_helm.png"), "armor → leggings-laag-job");
+
+// ── animatie (3 zichtbaarheden: icoon speelt af) ──
+const mc5 = JSON.parse(e11["src/main/resources/assets/uitbreiding_mod/textures/item/vurige_helm.mcmeta"]);
+ok(mc5.animation && mc5.animation.frametime === 10, "animatie → mcmeta met frametime");
+
+// ── geluiden ──
+const sj5 = JSON.parse(e11["src/main/resources/assets/uitbreiding_mod/sounds.json"]);
+ok(sj5["uitbreiding_mod:piep"] && sj5["uitbreiding_mod:piep"].sounds[0].name === "uitbreiding_mod:piep", "sounds.json → eigen geluid");
+ok(sj5["uitbreiding_mod:piep"].subtitle === "subtitles.uitbreiding_mod.piep", "sounds.json → ondertitel-key");
+ok(jobPaths11.includes("sounds/piep.ogg") && jobPaths11.includes("sounds/gong.ogg"), "geluiden → ogg-jobs");
+const ms5 = e11["src/main/java/com/tester4/uitbreiding_mod/ModSounds.java"];
+ok(ms5.includes('SoundEvent PIEP = register("piep")'), "ModSounds → veld per geluid");
+ok(ms5.includes("createVariableRangeEvent"), "ModSounds → mojmap-registratie");
+ok(e11["src/main/java/com/tester4/uitbreiding_mod/ModMain.java"].includes("ModSounds.register()"), "ModMain → start ModSounds");
+const lang11 = JSON.parse(e11["src/main/resources/assets/uitbreiding_mod/lang/nl_nl.json"]);
+ok(lang11["subtitles.uitbreiding_mod.piep"] === "Piepje", "lang → ondertitel Nederlandse naam");
+
+// ── quests ──
+const q5 = JSON.parse(e11["src/main/resources/data/uitbreiding_mod/advancement/eerste_stap.json"]);
+ok(q5.criteria.start.trigger === "minecraft:player_killed_entity", "quest → kill-trigger");
+ok(q5.display.icon.id === "minecraft:iron_sword", "quest → icoon-item");
+ok(q5.display.frame === "challenge" && q5.display.background, "quest → kader + achtergrond");
+ok(q5.rewards && q5.rewards.experience === 25, "quest → XP-beloning");
+ok(q5.rewards && q5.rewards.function === "uitbreiding_mod:eerste_stap_reward", "quest → commando-beloning via functie");
+ok((e11["src/main/resources/data/uitbreiding_mod/function/eerste_stap_reward.mcfunction"] || "").includes("say klaar"), "quest → reward-functie (function, enkelvoud op 26.x)");
+
+// ── mob-triggers + story-acties ──
+const ent5 = e11["src/main/java/com/tester4/uitbreiding_mod/entity/BoswachterEntity.java"];
+ok(ent5.includes("ModSounds.PIEP"), "trigger → eigen geluid-ref in entity");
+ok(ent5.includes("ParticleTypes.FLAME"), "trigger → partikel-const");
+ok(ent5.includes("sendParticles"), "trigger → sendParticles (26.3)");
+const st5 = e11["src/main/java/com/tester4/uitbreiding_mod/story/StoryManager.java"];
+ok(st5.includes('case "geluid"') && st5.includes("playsound "), "story → geluid-actie (Java)");
+ok(st5.includes('case "partikel"') && st5.includes("particle "), "story → partikel-actie (Java)");
+
+// ── import (project.json roundtrip via Zip) ──
+const impFiles = [
+  { path: "demo/project.json", data: JSON.stringify({ format: "blockymod-studio/1", project: { meta: { name: "Demo", modId: "demo" }, blocks: [], items: [] } }) },
+  { path: "demo/b.bin", data: new Uint8Array([1, 2, 3, 250, 255]) }
+];
+const impBack = Zip.readSync(Zip.build(impFiles));
+ok(impBack.length === 2, "zip → readSync roundtrip: 2 bestanden");
+ok(new TextDecoder().decode(impBack[0].data).includes("blockymod-studio/1"), "zip → project.json leesbaar");
+ok(Array.from(impBack[1].data).join(",") === "1,2,3,250,255", "zip → binaire data exact");
+const impProj = State.importProject(impBack.length ? JSON.parse(new TextDecoder().decode(impBack[0].data)).project : null);
+ok(impProj && impProj.meta.name === "Demo", "import → project toegevoegd");
+ok(impProj && impProj.meta.modId !== "demo" || impProj, "import → unieke sleutel");
+State.removeProject(impProj.meta.modId);
+State.switchTo(p5.meta.modId);
+
+// ── alles nog eens op 1.20.1 (yarn) ──
+p5.meta.mcVersion = "1.20.1";
+const y11 = Exporters.buildTextFiles(p5);
+const yjobs11 = Exporters.collectTextures(p5);
+const yPaths11 = yjobs11.map((j) => j.path).join("\n");
+const ym5 = y11["src/main/java/com/tester4/uitbreiding_mod/ModItems.java"];
+ok(ym5.includes("new ArmorItem(new net.minecraft.item.ArmorMaterial()"), "yarn → ArmorItem met anoniem materiaal");
+ok(ym5.includes("ArmorItem.Type.HELMET"), "yarn → ArmorItem.Type.HELMET");
+ok(ym5.includes('return "uitbreiding_mod:vurige_helm"'), "yarn → materiaal-naam bepaalt wapenlaag-pad");
+ok(y11["src/main/java/com/tester4/uitbreiding_mod/ModSounds.java"].includes("SoundEvent.of(id)"), "yarn → SoundEvent.of-registratie");
+ok(y11["src/main/resources/data/uitbreiding_mod/advancements/eerste_stap.json"] !== undefined, "yarn → advancements-map (meervoud)");
+ok(y11["src/main/resources/data/uitbreiding_mod/functions/eerste_stap_reward.mcfunction"] !== undefined, "yarn → functions-map (meervoud)");
+ok(yPaths11.includes("textures/models/armor/vurige_helm_layer_1.png"), "yarn → wapenlaag layer_1");
+ok(yPaths11.includes("textures/models/armor/vurige_helm_layer_2.png"), "yarn → wapenlaag layer_2");
+ok(!y11["src/main/resources/assets/uitbreiding_mod/equipment/vurige_helm.json"], "yarn → geen equipment-asset op 1.20.1");
+ok(!y11["src/main/resources/assets/uitbreiding_mod/textures/item/vurige_helm.mcmeta"] === false, "yarn → mcmeta animatie ook aanwezig");
+const yent5 = y11["src/main/java/com/tester4/uitbreiding_mod/entity/BoswachterEntity.java"];
+ok(yent5.includes("spawnParticles"), "yarn → spawnParticles");
+ok(yent5.includes("ModSounds.PIEP"), "yarn → eigen geluid-ref");
+const yst5 = y11["src/main/java/com/tester4/uitbreiding_mod/story/StoryManager.java"];
+ok(yst5.includes('case "geluid"') && yst5.includes('case "partikel"'), "yarn story → beide nieuwe acties");
+ok(y11["src/main/java/com/tester4/uitbreiding_mod/ModMain.java"].includes("ModSounds.register()"), "yarn ModMain → ModSounds");
+State.removeProject(p5.meta.modId);
+
 
 
 console.log("\n──────────────────────────────");

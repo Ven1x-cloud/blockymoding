@@ -644,13 +644,76 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       if ((sel.maxDamage | 0) > 0) ed.appendChild(el("div", { class: "small dim", text: "⚠ Duurzaamheid actief → Minecraft zet de stapelgrootte automatisch op 1." }));
 
       ed.appendChild(el("div", { class: "sep" }));
+      ed.appendChild(el("h3", { class: "card-title", text: "🛡️ Uitrusting (armor)" }));
+      if (!sel.armor) sel.armor = null;
+      ed.appendChild(el("div", { class: "grid2" },
+        field("Draagpositie", selectInput([
+          ["", "— geen (gewoon item) —"],
+          ["helmet", "⛑ Helm (hoofd)"],
+          ["chest", "🧥 Borstplaat (borst)"],
+          ["legs", "👖 Broek (benen)"],
+          ["boots", "🥾 Laarzen (voeten)"]
+        ], (sel.armor && sel.armor.slot) || "", (v) => {
+          if (!v) sel.armor = null;
+          else sel.armor = { slot: v, defense: (sel.armor && sel.armor.defense) || 3 };
+          changed();
+        }), "3 weergaven: inventaris, in de hand, op het lijf"),
+        field("Verdediging", textInput((sel.armor && sel.armor.defense) || 3, (v) => {
+          if (!sel.armor) return;
+          sel.armor.defense = Math.max(0, Math.min(20, parseInt(v, 10) || 0));
+          State.save();
+        }, { type: "number", min: "0", max: "20", disabled: sel.armor ? null : "disabled" }), "pantser-punten")
+      ));
+      if (sel.armor) {
+        ed.appendChild(el("div", { class: "small dim", text: "🧪 Zichtbaarheid: ① inventaris-icoon = de textuur hieronder, ② in je hand (andere spelers zien het ook), ③ op je lijf – de app genereert daarvoor automatisch de wapenlagen én het uitrustings-asset. Zet Duurzaamheid op >0 (bijv. 165), anders standaard per positie." }));
+        if (sel.frames && sel.frames.length) ed.appendChild(el("div", { class: "small dim", text: "🎞 Dit item is geanimeerd: het icoon speelt af in de inventaris én in de hand." }));
+      }
+
+      ed.appendChild(el("div", { class: "sep" }));
       ed.appendChild(el("h3", { class: "card-title", text: "Textuur (16×16)" }));
       const texHolder = el("div");
+      const frameRow = el("div", { class: "row mb", style: "flex-wrap:wrap" });
+      ed.appendChild(frameRow);
       ed.appendChild(texHolder);
-      TextureKit.mountEditor(texHolder, {
-        size: 16, pixels: sel.pixels,
-        onChange: (px) => { sel.pixels = px; State.save(); }
-      });
+      if (!sel.frames) sel.frames = [];
+      let activeFrame = 0;
+      const framePx = (i) => {
+        if (i === 0) { if (!sel.pixels) sel.pixels = new Array(256).fill(null); return sel.pixels; }
+        if (!sel.frames[i - 1]) sel.frames[i - 1] = new Array(256).fill(null);
+        return sel.frames[i - 1];
+      };
+      const mountTex = () => {
+        texHolder.innerHTML = "";
+        TextureKit.mountEditor(texHolder, {
+          size: 16, pixels: framePx(activeFrame),
+          onChange: (px) => {
+            if (activeFrame === 0) sel.pixels = px; else sel.frames[activeFrame - 1] = px;
+            State.save();
+          }
+        });
+      };
+      const renderFrameRow = () => {
+        frameRow.innerHTML = "";
+        const total = 1 + sel.frames.length;
+        for (let i = 0; i < total; i++) {
+          frameRow.appendChild(el("button", {
+            class: "mc-btn mc-btn-sm " + (i === activeFrame ? "mc-btn-green" : "mc-btn-ghost"),
+            text: "🎞 Frame " + (i + 1),
+            onclick: () => { activeFrame = i; renderFrameRow(); mountTex(); }
+          }));
+        }
+        if (total < 4) frameRow.appendChild(el("button", {
+          class: "mc-btn mc-btn-sm mc-btn-ghost", text: "➕ Animeer-frame",
+          onclick: () => { sel.frames.push(new Array(256).fill(null)); activeFrame = sel.frames.length; State.save(); renderFrameRow(); mountTex(); }
+        }));
+        if (sel.frames.length) frameRow.appendChild(el("button", {
+          class: "mc-btn mc-btn-sm mc-btn-red", text: "✖ Laatste frame weg",
+          onclick: () => { sel.frames.pop(); if (activeFrame > sel.frames.length) activeFrame = 0; State.save(); renderFrameRow(); mountTex(); }
+        }));
+        if (sel.frames.length) frameRow.appendChild(el("span", { class: "dim small", style: "align-self:center", text: "▶ Speelt af in inventaris én in de hand." }));
+      };
+      renderFrameRow();
+      mountTex();
 
       ed.appendChild(el("div", { class: "row mt" },
         el("button", {
@@ -1293,6 +1356,35 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
         field("🏃 Snelheid", textInput(sel.speed, (v) => { sel.speed = parseFloat(v) || 0; State.save(); }, { type: "number", step: "0.05" })),
         field("⚔ Aanval", textInput(sel.damage, (v) => { sel.damage = parseFloat(v) || 0; State.save(); }, { type: "number", step: "0.5" }))
       ));
+      // 🧊 3D-preview met loop-animatie (voorvertoning)
+      const m3dCard = el("div", { class: "card" });
+      m3dCard.appendChild(el("div", { class: "row" },
+        el("strong", { text: "🧊 3D-preview met animatie" }),
+        el("span", { class: "dim small", text: "voorvertoning – in-game gebruikt Minecraft het varkensmodel met je kleuren; echte ledemaat-animaties komen via ai-code/animaties/" })
+      ));
+      const m3dStage = el("div", { class: "m3d-stage" });
+      const m3dRig = el("div", { class: "m3d-rig" });
+      const m3dParts = ["m3d-head", "m3d-body", "m3d-leg m3d-leg1", "m3d-leg m3d-leg2", "m3d-leg m3d-leg3", "m3d-leg m3d-leg4"]
+        .map((c) => el("div", { class: "m3d " + c }));
+      m3dRig.append(...m3dParts);
+      m3dRig.style.setProperty("--c1", sel.colors.primary || "#55ff55");
+      m3dRig.style.setProperty("--c2", sel.colors.secondary || "#222222");
+      m3dStage.appendChild(m3dRig);
+      let m3dPlaying = State.ui.m3dPlay !== false;
+      const m3dBtn = el("button", {
+        class: "mc-btn mc-btn-sm", text: m3dPlaying ? "⏸ Pauze" : "▶ Lopen",
+        onclick: (e) => {
+          m3dPlaying = !m3dPlaying;
+          State.ui.m3dPlay = m3dPlaying;
+          m3dRig.classList.toggle("playing", m3dPlaying);
+          e.target.textContent = m3dPlaying ? "⏸ Pauze" : "▶ Lopen";
+        }
+      });
+      if (m3dPlaying) m3dRig.classList.add("playing");
+      m3dCard.appendChild(el("div", { class: "row mb" }, m3dBtn, el("span", { class: "dim small", text: "draaiende kop + loop-ende poten" })));
+      m3dCard.appendChild(m3dStage);
+      ed.appendChild(m3dCard);
+
       ed.appendChild(el("div", { class: "grid2" },
         field("Breedte", textInput(sel.width, (v) => { sel.width = parseFloat(v) || 0.9; State.save(); }, { type: "number", step: "0.1" })),
         field("Hoogte", textInput(sel.height, (v) => { sel.height = parseFloat(v) || 1.4; State.save(); }, { type: "number", step: "0.1" }))
@@ -1328,6 +1420,25 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
           checkInput("💔 Bij laag leven", sel.triggers.includes("lowhp"), trigToggle("lowhp"))
         )
       ));
+      ed.appendChild(el("div", { class: "grid2 mt" },
+        field("🔊 Geluid bij triggers", selectInput([
+          ["", "— standaard (varken-geluid) —"],
+          ["vanilla:ENTITY_PIG_AMBIENT", "Varken (standaard)"],
+          ["vanilla:ENTITY_CAT_AMBIENT", "Kat"],
+          ["vanilla:ENTITY_WOLF_GROWL", "Wolf"],
+          ["vanilla:ENTITY_ENDER_DRAGON_GROWL", "Enderdraak"],
+          ["vanilla:ENTITY_RAVAGER_ROAR", "Ravager"],
+          ["vanilla:ITEM_BELL_RING", "Klok"],
+          ["vanilla:PLAYER_LEVELUP", "Level-up"],
+          ...((p.sounds || []).map((s) => ["mod:" + s.id, "🔊 " + (s.naam || s.id) + " (eigen)"]))
+        ], sel.triggerSound || "", (v) => { sel.triggerSound = v; State.save(); }), "speelt bij spawn-triggers"),
+        field("✨ Partikel bij triggers", selectInput(
+          [["", "— geen —"], ...PARTICLE_OPTS.map(([full, lbl]) => [full.replace("minecraft:", ""), lbl])],
+          sel.triggerParticle || "", (v) => { sel.triggerParticle = v; State.save(); }), "rook/vlam bij spawn + timer")
+      ));
+      if ((sel.triggerSound || "").startsWith("mod:") || sel.triggerParticle) {
+        ed.appendChild(el("div", { class: "small dim", text: "🔧 Wordt direct in de entity-klasse gegenereerd (spawn + elke 5 sec). Eigen geluiden komen uit jouw ModSounds." }));
+      }
 
       // spawn-ei kleuren
       ed.appendChild(el("div", { class: "sep" }));
@@ -1401,6 +1512,8 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     weather: "🌧 Weer veranderen",
     time: "🕐 Tijd veranderen",
     command: "⌨ Commando uitvoeren",
+    geluid: "🔊 Geluid afspelen",
+    partikel: "✨ Partikel tonen",
     next: "➡ Volgend hoofdstuk"
   };
 
@@ -1419,6 +1532,9 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
   function renderStory(root) {
     const p = cur();
     sectionTitle("Verhaal", "Schrijf een storyline: triggers (gebeurtenissen) → acties. Alles wordt Java-code in je mod.").forEach((n) => root.appendChild(n));
+
+    renderSoundsCard(root, p);
+    renderQuestsCard(root, p);
 
     root.appendChild(el("div", { class: "row mb" },
       el("button", { class: "mc-btn mc-btn-green", text: "➕ Hoofdstuk", onclick: addChapter }),
@@ -1453,6 +1569,97 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       }));
       root.appendChild(card);
     });
+  }
+
+  const PARTICLE_OPTS = [
+    ["minecraft:flame", "🔥 Vlam"], ["minecraft:smoke", "💨 Rook"], ["minecraft:heart", "❤ Hartjes"],
+    ["minecraft:crit", "💥 Kritiek-stukjes"], ["minecraft:enchanted_hit", "✨ Verhekst-stukjes"],
+    ["minecraft:happy_villager", "😊 Blije dorpeling"], ["minecraft:end_rod", "🌟 Eindstaafje"],
+    ["minecraft:snowflake", "❄ Sneeuwvlok"], ["minecraft:electric_spark", "⚡ Vonk"],
+    ["minecraft:portal", "🌀 Portaal"], ["minecraft:underwater", "💧 Waterbel"],
+    ["minecraft:note", "🎵 Noot"], ["minecraft:slime", "🟩 Slijm"]
+  ];
+
+  function renderSoundsCard(root, p) {
+    if (!p.sounds) p.sounds = [];
+    const card = el("div", { class: "card" });
+    card.appendChild(el("h3", { class: "card-title", text: "🔊 Geluiden" }));
+    card.appendChild(el("div", { class: "small dim", text: "Acht kant-en-klare geluiden (klik ▶ om te horen). ➕ zet ze in je mod als .ogg + geluids-event – daarna bruikbaar in verhaal-acties en mob-triggers." }));
+    const row = el("div", { class: "row", style: "flex-wrap:wrap;margin-top:6px" });
+    Object.keys(SoundLib || {}).forEach((k) => {
+      row.appendChild(el("button", {
+        class: "mc-btn mc-btn-sm mc-btn-ghost", text: "▶ " + SoundLib[k].naam,
+        onclick: () => { try { new Audio("data:audio/ogg;base64," + SoundLib[k].b64).play(); } catch (e) { /* ok */ } }
+      }));
+      row.appendChild(el("button", {
+        class: "mc-btn mc-btn-sm", text: "➕", title: "aan mod toevoegen",
+        onclick: () => {
+          let n = 1, id = k;
+          while (p.sounds.some((x) => x.id === id)) id = k + "_" + (++n);
+          p.sounds.push({ id, naam: SoundLib[k].naam, lib: k });
+          changed();
+        }
+      }));
+    });
+    card.appendChild(row);
+    if (p.sounds.length) {
+      p.sounds.forEach((snd, i) => {
+        card.appendChild(el("div", { class: "row", style: "margin-top:6px" },
+          el("span", { text: "🔊" }),
+          textInput(snd.id, (v) => { snd.id = sanitizeId(v); State.save(); }, { style: "width:150px;font-weight:bold", title: "id in de mod" }),
+          el("span", { class: "dim small", text: `${p.meta.modId}:${snd.id} · ${snd.naam || snd.lib}` }),
+          el("span", { class: "spacer" }),
+          deleteBtn(() => { p.sounds.splice(i, 1); changed(); }, "🗑")
+        ));
+      });
+    }
+    root.appendChild(card);
+  }
+
+  function renderQuestsCard(root, p) {
+    if (!p.quests) p.quests = [];
+    const card = el("div", { class: "card" });
+    card.appendChild(el("h3", { class: "card-title", text: "🏆 Quests (advancements)" }));
+    card.appendChild(el("div", { class: "small dim", text: "Doelen die Minecraft toont als prestatie (toast + prestatiescherm). Met beloning: XP en/of een commando." }));
+    p.quests.forEach((q, i) => {
+      const box = el("div", { class: "quest-box" });
+      box.appendChild(el("div", { class: "grid2" },
+        field("Naam", textInput(q.title, (v) => { q.title = v; State.save(); }, { style: "font-weight:bold" })),
+        field("ID", textInput(q.id, (v) => { q.id = sanitizeId(v); State.save(); }, { title: "interne id" }))
+      ));
+      box.appendChild(el("div", { class: "grid3" },
+        field("Wanneer?", selectInput([
+          ["direct", "✔ Direct (zodra laden)"],
+          ["item", "🎒 Item verzamelen"],
+          ["kill", "⚔ Mob verslaan"]
+        ], q.type || "direct", (v) => { q.type = v; changed(); })),
+        field("Icoon-item", textInput(q.icon || "", (v) => { q.icon = v.trim(); State.save(); }, { placeholder: "minecraft:diamond" })),
+        field("Kader", selectInput([["task", "Taak"], ["goal", "Doel"], ["challenge", "Uitdaging"]], q.frame || "task", (v) => { q.frame = v; State.save(); }))
+      ));
+      if (q.type === "item") {
+        box.appendChild(field("Benodigd item-id", textInput(q.itemId || "", (v) => { q.itemId = v.trim(); State.save(); }, { placeholder: "minecraft:diamond" })));
+      }
+      if (q.type === "kill") {
+        box.appendChild(field("Te verslaan (entity-id)", textInput(q.entityId || "", (v) => { q.entityId = v.trim(); State.save(); }, { placeholder: "minecraft:zombie" })));
+      }
+      box.appendChild(el("div", { class: "grid3" },
+        field("Omschrijving", textInput(q.desc || "", (v) => { q.desc = v; State.save(); })),
+        field("XP", textInput(q.xp || 0, (v) => { q.xp = Math.max(0, parseInt(v, 10) || 0); State.save(); }, { type: "number", min: "0" })),
+        field("Bonus-commando", textInput(q.cmd || "", (v) => { q.cmd = v; State.save(); }, { placeholder: "give @s minecraft:diamond" }))
+      ));
+      box.appendChild(el("div", { class: "row" },
+        deleteBtn(() => confirmDelete(q.title || q.id, () => { p.quests.splice(i, 1); changed(); }), "🗑 Verwijder quest")
+      ));
+      card.appendChild(box);
+    });
+    card.appendChild(el("button", {
+      class: "mc-btn mc-btn-sm mt", text: "➕ Quest",
+      onclick: () => {
+        p.quests.push({ id: uid("quest"), title: "Nieuwe quest", desc: "", type: "direct", icon: "minecraft:stone", frame: "task", xp: 10, cmd: "" });
+        changed();
+      }
+    }));
+    root.appendChild(card);
   }
 
   function renderEvent(p, ch, ev, ei) {
@@ -1496,6 +1703,8 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
           spawn: { type: "spawn", entity: "minecraft:zombie", count: 1 },
           weather: { type: "weather", state: "clear" },
           time: { type: "time", state: "day" },
+          geluid: { type: "geluid", sound: "minecraft:block.note_block.pling", volume: 1, pitch: 1 },
+          partikel: { type: "partikel", particle: "minecraft:flame", count: 20 },
           command: { type: "command", cmd: "say Hallo!" },
           next: { type: "next" }
         };
@@ -1542,6 +1751,8 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     if (a.type === "spawn") return ": " + (a.count || 1) + "× " + (a.entity || "?");
     if (a.type === "weather" || a.type === "time") return ": " + (a.state || "");
     if (a.type === "command") return ": " + (a.cmd || "").slice(0, 30);
+    if (a.type === "geluid") return ": " + (a.sound || "").split(":").pop();
+    if (a.type === "partikel") return ": " + (a.particle || "").split(":").pop() + " ×" + (a.count || 20);
     return "";
   }
 
@@ -1557,6 +1768,26 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
         textInput(a.count, (v) => { a.count = Math.max(1, parseInt(v, 10) || 1); upd(); }, { type: "number", min: "1", style: "width:70px" })));
     } else if (a.type === "gui") {
       wrap.appendChild(selectInput(p.guis.map((g) => [g.id, g.name]), a.gui, (v) => { a.gui = v; upd(); }));
+    } else if (a.type === "geluid") {
+      const opts = [
+        ["minecraft:block.note_block.pling", "🔸 Pling (vanilla)"],
+        ["minecraft:entity.player.levelup", "🌟 Level-up (vanilla)"],
+        ["minecraft:ui.toast.challenge_complete", "🏆 Quest-taart (vanilla)"],
+        ["minecraft:block.anvil.land", "🔨 Aambeeld (vanilla)"],
+        ...((p.sounds || []).map((s) => [`${p.meta.modId}:${s.id}`, `🔊 ${s.naam || s.id} (eigen)`]))
+      ];
+      const cur = opts.some((o) => o[0] === a.sound) ? a.sound : opts[0][0];
+      wrap.appendChild(el("span", { class: "row" },
+        selectInput(opts, cur, (v) => { a.sound = v; upd(); }),
+        textInput(a.volume ?? 1, (v) => { a.volume = parseFloat(v) || 1; upd(); }, { type: "number", step: "0.1", style: "width:70px", title: "volume" }),
+        textInput(a.pitch ?? 1, (v) => { a.pitch = parseFloat(v) || 1; upd(); }, { type: "number", step: "0.1", style: "width:70px", title: "toonhoogte" })
+      ));
+    } else if (a.type === "partikel") {
+      const cur = PARTICLE_OPTS.some((o) => o[0] === a.particle) ? a.particle : "minecraft:flame";
+      wrap.appendChild(el("span", { class: "row" },
+        selectInput(PARTICLE_OPTS, cur, (v) => { a.particle = v; upd(); }),
+        textInput(a.count ?? 20, (v) => { a.count = Math.max(1, parseInt(v, 10) || 20); upd(); }, { type: "number", min: "1", style: "width:70px", title: "aantal" })
+      ));
     } else if (a.type === "spawn") {
       wrap.appendChild(el("span", { class: "row" },
         textInput(a.entity, (v) => { a.entity = v.trim(); upd(); }, { placeholder: "entity-id", style: "width:230px" }),
@@ -1855,6 +2086,11 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
         const { textFiles, textures } = Exporters.exportPlan(p);
         const files = [];
         const root = p.meta.modId + "/";
+        const safeProj = Object.assign({}, p, { github: Object.assign({}, p.github || {}, { token: "" }) });
+        files.push({
+          path: root + "project.json",
+          data: JSON.stringify({ format: "blockymod-studio/1", exportedAt: new Date().toISOString(), project: safeProj }, null, 2)
+        });
         for (const [path, content] of Object.entries(textFiles)) {
           files.push({ path: root + path, data: content });
         }
@@ -1902,6 +2138,31 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
   }
 
   $("#btnExport").addEventListener("click", () => exportMod());
+  const importBtn = $("#btnImport");
+  if (importBtn) importBtn.addEventListener("click", () => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".zip,application/zip";
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      try {
+        const buf = new Uint8Array(await f.arrayBuffer());
+        const entries = await Zip.read(buf);
+        const pj = entries.find((e) => e.path.endsWith("project.json"));
+        if (!pj) throw new Error("Geen project.json in deze ZIP. Exporteer de mod opnieuw met deze versie van BlockyMod Studio.");
+        const raw = JSON.parse(new TextDecoder().decode(pj.data));
+        const proj = raw.project || raw;
+        const copy = State.importProject(proj);
+        toast(`Geïmporteerd: ${copy.meta.name} 🎉`, "ok");
+        goto("dashboard");
+      } catch (err) {
+        console.error(err);
+        toast("Importeren mislukt: " + (err.message || err), "err");
+      }
+    };
+    inp.click();
+  });
 
   // ══════════════════════════════════════════════
   //  Start

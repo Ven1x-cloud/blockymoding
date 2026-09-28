@@ -1,0 +1,17 @@
+{
+  "name": "blockymod-studio",
+  "version": "1.0.0",
+  "description": "BlockyMod Studio - maak simpel Minecraft mods: blokken, werkbanken, GUI's, mobs en verhaallijnen",
+  "main": "main.js",
+  "author": "Ven1x-cloud",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "check": "node tools/check.js && node tools/dom-check.js",
+    "check:zip": "node tools/check.js",
+    "check:dom": "node tools/dom-check.js"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}

@@ -1,1 +1,139 @@
-# blockymoding
+# 🟩 BlockyMod Studio
+
+**Een Windows-app waarmee je simpel Minecraft-mods maakt** – blokken, items,
+werkbanken met eigen GUI, mobs (met interactie-GUI) én een verhaallijn, zonder
+dat je één regel code hoeft te typen. De app genereert een complete
+**Fabric-mod** (Java + assets + recepten) als ZIP.
+
+```
+🟩 Overzicht     🧱 Blokken      🗡️ Items       🛠️ Werkbanken
+🖼️ GUI's         🐷 Mobs         📖 Verhaal     🤖 AI-code / GitHub
+```
+
+---
+
+## 🚀 Starten op Windows
+
+**Optie 1 – Electron-app (aanbevolen)**
+
+> 1. Installeer [Node.js](https://nodejs.org) (één keer)
+> 2. Dubbelklik op **`app\Start.bat`**
+> 3. Klaar – de app opent in een eigen venster
+
+**Optie 2 – in je browser**
+
+> Dubbelklik op **`app\OpenInBrowser.bat`** (of open `app/renderer/index.html`)
+
+Alle data wordt lokaal opgeslagen (browser-opslag). Exporteren = één knop → ZIP.
+
+---
+
+## 🧱 Wat kun je maken?
+
+| Onderdeel | Wat doet de app |
+|-----------|-----------------|
+| **Blokken** | Naam, hardheid, gereedschap, lichtsterkte + 16×16 textuur-editor met *auto-genereren* (steen, bakstenen, ertsen, hout, gras…) |
+| **Items** | Naam, stapelgrootte + textuur-editor |
+| **Werkbanken** | Maak in één keer een blok + typische Minecraft-3×3-GUI + recepten (vormgebonden/vormloos/smelten/smoken). Sleep slots/knoppen/labels heen: de Java-code volgt je ontwerp |
+| **GUI's** | Volledige GUI-ontwerper (slots, knoppen, labels, pijlen, vlakken) in Minecraft-stijl |
+| **Mobs** | Vreedzaam of hostiel, leven/snelheid/aanval/drops, spawn-ei-kleuren – **en** een eigen GUI bij rechtermuisklik |
+| **Verhaal** | Hoofdstukken met triggers (inloggen, mob doden, blok/item rechtsklikken, locatie) en acties (bericht, item, GUI, spawn, weer, tijd, commando, volgend hoofdstuk) |
+| **Export** | Knop **⬇ Exporteer mod** → complete Fabric-mod als ZIP (gradle, Java, texturen, recepten, verhaal-JSON) |
+
+Standaard-target: **Minecraft 1.20.1 / Fabric** (optioneel 1.21.1), Java 17+.
+
+---
+
+## 🤖 De AI-code workflow (GitHub-knop)
+
+De app **herinnert je bij elke nieuwe mod** om een map in jouw branch te maken
+waar ik (de AI) code voor je in kan zetten:
+
+```bash
+mkdir ai-code
+echo "# AI-code map" > ai-code/README.md
+git add ai-code
+git commit -m "ai-code map toegevoegd"
+git push -u origin <jouw-branch>
+```
+
+Daarna:
+
+1. **Jij** vraagt mij in de chat om code, bijvoorbeeld:
+   > "Zet in `ai-code/` een klasse die de kassa-actie afhandelt"
+2. **Ik** push die bestanden naar de `ai-code/`-map in jouw branch.
+3. **Jij** opent de app → tab **🤖 AI-code / GitHub** →
+   **Codes ophalen bij GitHub** → de bestanden zitten direct in je volgende export.
+
+Vul daar eigenaar/repo/branch/map in (standaard `Ven1x-cloud/blockymoding` →
+`ai-code`). Bij privé-repos: voeg een GitHub-PAT in (wordt alleen lokaal bewaard).
+
+---
+
+## 📁 Structuur van deze repo
+
+```
+blockymoding/
+├── README.md            ← dit bestand
+├── ai-code/             ← map voor codes die ik voor je schrijf
+└── app/
+    ├── Start.bat        ← Windows: installeer + start (Electron)
+    ├── OpenInBrowser.bat← Windows: open in browser
+    ├── package.json     ← electron-afhankelijkheden
+    ├── main.js          ← Electron-hoofdproces (opslaan-dialoog)
+    ├── preload.js
+    ├── renderer/        ← de eigenlijke app (HTML/CSS/JS, werkt ook offline)
+    │   ├── index.html
+    │   ├── css/style.css
+    │   └── js/
+    │       ├── state.js       projectmodell + opslag
+    │       ├── texture.js     16×16 textuur-editor + generatoren
+    │       ├── guidesign.js   GUI-ontwerper (slepen, render, validatie)
+    │       ├── recipes.js     receptpatronen + suggesties
+    │       ├── exporters.js   genereert álle mod-bestanden (JSON/Java)
+    │       ├── zip.js         minitare ZIP-schrijver (geen libraries)
+    │       ├── github.js      GitHub contents-API client
+    │       └── app.js         UI-schermen
+    └── tools/
+        ├── check.js       export-test (node tools/check.js)
+        └── dom-check.js   UI-smoketest in jsdom
+```
+
+### Controles draaien (ontwikkelaars)
+
+```bash
+cd app
+npm run check        # export + DOM-smoketest
+```
+
+---
+
+## ⚙️ Hoe ziet de gegenereerde mod eruit?
+
+```
+mijn_mod/
+├── build.gradle · settings.gradle · gradle.properties
+├── README.md
+├── ai-code/                     ← jouw + mijn code
+├── src/main/java/…/ModMain.java
+│   ├── ModBlocks · ModItems · ModEntities
+│   ├── gui/*ScreenHandler · client/*Screen
+│   ├── entity/*Entity
+│   └── story/StoryManager · StoryEvents
+└── src/main/resources/
+    ├── fabric.mod.json
+    ├── assets/<mod>/textures · models · blockstates · lang · layout
+    └── data/<mod>/recipes · loot_tables · story
+```
+
+Open de map in IntelliJ IDEA, laat Gradle syncen en draai `runClient`.
+
+> **Let op:** de Java-stubs raken een specifieke mappings-versie (Yarn 1.20.1).
+> Kom je een kleine compilefout tegen? Vraag het mij – gooi de fout in de chat
+> en zet de gefixte code in `ai-code/`, daarna haal je hem met één knop op.
+
+---
+
+## 📜 Licentie
+
+MIT – bouw lekker verder. 🎮

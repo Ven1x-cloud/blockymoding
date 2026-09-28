@@ -12,11 +12,11 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "node_modules" (
+if not exist "app\node_modules" (
   echo.
   echo  Eerste keer? Even dependencies installeren, dit kan een paar minuten duren...
   echo.
-  call npm install --no-audit --no-fund
+  call npm --prefix app install --no-audit --no-fund
   if errorlevel 1 (
     echo.
     echo  npm install is mislukt.
@@ -29,7 +29,7 @@ if not exist "node_modules" (
   )
 )
 
-call npm start
+call npm --prefix app start
 if errorlevel 1 (
   echo.
   echo  Starten mislukt. Alternatief: dubbelklik op OpenInBrowser.bat

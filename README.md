@@ -20,27 +20,29 @@ dat je één regel code hoeft te typen. De app genereert een complete
 >
 > ```bat
 > git clone -b arena/01a0e754-blockymoding https://github.com/Ven1x-cloud/blockymoding.git
-> cd blockymoding\app
+> cd blockymoding
 > npm install
 > npm start
 > ```
 >
-> Zonder Git? Dan eerst de ZIP ophalen:
+> Zonder Git? Dan eerst de ZIP ophalen (mapnamen kunnen iets afwijken – gebruik `dir` om te kijken):
 >
 > ```bat
 > curl -L -o blockymoding.zip https://github.com/Ven1x-cloud/blockymoding/archive/refs/heads/arena/01a0e754-blockymoding.zip
 > tar -xf blockymoding.zip
-> cd blockymoding-arena.01a0e754-blockymoding\app
+> cd blockymoding-arena-01a0e754-blockymoding
 > npm install
 > npm start
 > ```
 >
-> *(Na het samenvoegen van de PR naar `main` werkt dezelfde truc met `main` in plaats van de branche-naam.)*
+> Je kunt dit gewoon in de **hoofdmap** van het project draaien – `npm install`
+> pakt de app automatisch mee (de echte app zit in `\app`, dat regelt de root
+> zelf). *(Na het samenvoegen van de PR naar `main` werkt dezelfde truc met `main`.)*
 
 **Optie 2 – Electron-app (dubbelklik)**
 
 > 1. Installeer [Node.js](https://nodejs.org) (één keer)
-> 2. Dubbelklik op **`app\Start.bat`**
+> 2. Dubbelklik op **`Start.bat`** (hoofdmap) of `app\Start.bat`
 > 3. Klaar – de app opent in een eigen venster met logo
 
 **Optie 3 – in je browser**
@@ -117,10 +119,14 @@ Vul daar eigenaar/repo/branch/map in (standaard `Ven1x-cloud/blockymoding` →
 ```
 blockymoding/
 ├── README.md            ← dit bestand
+├── Start.bat            ← Windows: dubbelklik → installeer + start
+├── package.json         ← root-scripts: npm install / npm start werken hier
 ├── ai-code/             ← map voor codes die ik voor je schrijf
 └── app/
     ├── Start.bat        ← Windows: installeer + start (Electron)
+    ├── MaakBureaubladkoppeling.bat ← bureaublad-snelkoppeling met icoon
     ├── OpenInBrowser.bat← Windows: open in browser
+    ├── icon.ico / icon.png / renderer/assets/logo.png ← het logo
     ├── package.json     ← electron-afhankelijkheden
     ├── main.js          ← Electron-hoofdproces (opslaan-dialoog)
     ├── preload.js

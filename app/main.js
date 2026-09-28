@@ -9,8 +9,9 @@ function createWindow() {
     height: 920,
     minWidth: 1024,
     minHeight: 700,
-    backgroundColor: '#1b1410',
+    backgroundColor: '#0b0d12',
     title: 'BlockyMod Studio',
+    icon: path.join(__dirname, 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

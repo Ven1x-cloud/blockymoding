@@ -196,7 +196,7 @@
   function showCreateProject() {
     const nameIn = el("input", { class: "mc-input", value: "Mijn Grote Mod", placeholder: "bijv. Mijn Grote Mod" });
     const authorIn = el("input", { class: "mc-input", value: "Modder", placeholder: "Jouw naam" });
-    const verSel = selectInput(["1.20.1", "1.21.1"], "1.20.1", () => {});
+    const verSel = selectInput(Exporters.VERSION_OPTIONS, "26.3", () => {});
     const pkgIn = el("input", { class: "mc-input", value: "com.modder.mijn_grote_mod" });
     const syncPkg = () => {
       pkgIn.value = "com." + sanitizeId(authorIn.value || "modder") + "." + sanitizeId(nameIn.value || "mod");
@@ -207,7 +207,7 @@
     const content = el("div", {},
       field("Naam van de mod", nameIn),
       field("Jouw naam (auteur)", authorIn),
-      field("Minecraft-versie", verSel, "Fabric-mod, Java 17+"),
+      field("Minecraft-versie", verSel, "Fabric-mod · 26.3 = laatste versie (Mojang-mappings, Java 25) · 1.20.1/1.21.1 = stabiel (Yarn, Java 17/21)"),
       field("Java-pakket", pkgIn)
     );
 
@@ -286,7 +286,8 @@
         field("Versie", textInput(meta.version, (v) => { meta.version = v; changed(); })),
         field("Auteur", textInput(meta.author, (v) => { meta.author = v; changed(); })),
         field("Java-pakket", textInput(meta.package, (v) => { meta.package = v; changed(); })),
-        field("Minecraft-versie", selectInput(["1.20.1", "1.21.1"], meta.mcVersion, (v) => { meta.mcVersion = v; changed(); }))
+        field("Minecraft-versie", selectInput(Exporters.VERSION_OPTIONS, meta.mcVersion, (v) => { meta.mcVersion = v; changed(); }),
+        "26.3 = laatste versie (Mojang-mappings). Bij compile-waarschuwingen: vraag de AI.")
       )
     ));
   }

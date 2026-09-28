@@ -5,18 +5,34 @@ const Exporters = (() => {
   // ── Hulpjes ──
   const MC_PROFILES = {
     "1.20.1": { yarn: "1.20.1+build.10", loader: "0.15.11", fabric: "0.92.2+1.20.1", loom: "1.6-SNAPSHOT", java: 17 },
-    "1.21.1": { yarn: "1.21.1+build.3", loader: "0.16.9", fabric: "0.115.1+1.21.1", loom: "1.7-SNAPSHOT", java: 21 }
+    "1.21.1": { yarn: "1.21.1+build.3", loader: "0.16.9", fabric: "0.115.1+1.21.1", loom: "1.7-SNAPSHOT", java: 21 },
+    // 🟢 Laatste versie (sept 2026): kalender-versie + officiële Mojang-mappings
+    "26.3": { loader: "0.19.5", fabric: "0.160.5+26.3", loom: "1.15-SNAPSHOT", java: 25, mojmap: true }
   };
+
+  const VERSION_OPTIONS = [
+    ["26.3", "26.3 – laatste versie (Mojang-mappings)"],
+    ["1.20.1", "1.20.1 – stabiel (Yarn)"],
+    ["1.21.1", "1.21.1 – stabiel (Yarn)"]
+  ];
 
   function profile(p) {
     return MC_PROFILES[p.meta.mcVersion] || MC_PROFILES["1.20.1"];
+  }
+  /** Kalender-versies (26.x) gebruiken officiële Mojang-mappings */
+  function isMojmap(p) {
+    return !!(profile(p).mojmap);
   }
   function is121(p) {
     const v = p.meta.mcVersion || "1.20.1";
     return parseInt(v.split(".")[1], 10) >= 21;
   }
-  function lootDir(p) { return is121(p) ? "loot_table" : "loot_tables"; }
-  function recipesDir(p) { return is121(p) ? "recipe" : "recipes"; }
+  /** 1.21+ én 26.x: nieuwe datapack-mappen (loot_table, recipe) */
+  function usesNewDirs(p) {
+    return isMojmap(p) || is121(p);
+  }
+  function lootDir(p) { return usesNewDirs(p) ? "loot_table" : "loot_tables"; }
+  function recipesDir(p) { return usesNewDirs(p) ? "recipe" : "recipes"; }
   function idExpr(p, pathLit) {
     // pathLit = bv. `"mijn_blok"`
     return is121(p)
@@ -32,7 +48,7 @@ const Exporters = (() => {
       : "import net.fabricmc.fabric.api.item.v1.FabricItemSettings;";
   }
   function materialLine(p, tool) {
-    if (is121(p)) return "";
+    if (usesNewDirs(p)) return "";
     const mat = { pickaxe: "STONE", axe: "WOOD", shovel: "GROUND", hoe: "PLANTS", none: "STONE" }[tool] || "STONE";
     return `\n            .material(Material.${mat})`;
   }
@@ -79,6 +95,9 @@ const Exporters = (() => {
     put(`src/main/java/${pkgDir(p)}/ModBlocks.java`, modBlocks(p));
     put(`src/main/java/${pkgDir(p)}/ModItems.java`, modItems(p));
     put(`src/main/java/${pkgDir(p)}/ModEntities.java`, modEntities(p));
+    if (isMojmap(p)) {
+      put(`src/main/java/${pkgDir(p)}/CreativeTab.java`, creativeTabM(p));
+    }
 
     // ── Blokken ──
     const ns = p.meta.modId;
@@ -138,7 +157,8 @@ const Exporters = (() => {
 
     // ── GUI-klassen ──
     for (const g of p.guis) {
-      put(`src/main/java/${pkgDir(p)}/gui/${classname(g.id)}ScreenHandler.java`, screenHandler(p, g));
+      const handlerFile = isMojmap(p) ? `${classname(g.id)}Menu.java` : `${classname(g.id)}ScreenHandler.java`;
+      put(`src/main/java/${pkgDir(p)}/gui/${handlerFile}`, screenHandler(p, g));
       put(`src/main/java/${pkgDir(p)}/client/${classname(g.id)}Screen.java`, screenClass(p, g));
     }
     if (p.guis.length) {
@@ -174,14 +194,19 @@ const Exporters = (() => {
 Gemaakt met **BlockyMod Studio** 🟩
 
 - **Mod-id:** \`${p.meta.modId}\`
-- **Minecraft:** ${p.meta.mcVersion} (Fabric)
+- **Minecraft:** ${p.meta.mcVersion} (Fabric, Java ${profile(p).java}+)
+- **Mappings:** ${isMojmap(p) ? "officiële Mojang-mappings (standaard sinds Minecraft 26.1)" : "Yarn " + (profile(p).yarn || "")}
 - **Pakket:** \`${p.meta.package}\`
 - **Auteur:** ${p.meta.author}
-
+${isMojmap(p) ? `
+> ⚠️ **Laatste-versie-doel:** dit project is gegenereerd voor Minecraft ${p.meta.mcVersion}.
+> Fabric API-namen zijn recent gewijzigd – als er een kleine compilefout is,
+> plak die in de chat en dan fix ik hem in \`ai-code/\`.
+` : ""}
 ## Openen & draaien
 
 1. Open deze map in **IntelliJ IDEA** (met de Gradle-plugin) of in VS Code.
-2. Laat Gradle syncen (internet nodig – Fabric Loom wordt gedownload).
+2. Laat Gradle syncen (internet nodig – Fabric Loom wordt gedownload).${isMojmap(p) ? " Gebruik **Gradle 9.4+** (nodig voor Loom 1.15)." : ""}
 3. Draai de client met het Gradle-taak \`runClient\`.
 
 > Geen Gradle geïnstalleerd? Installeer het of gebruik je IDE's Gradle-integratie.
@@ -225,6 +250,7 @@ Map voor code die door de AI is geschreven.
 
   // ── Gradle ──
   function buildGradle(p) {
+    if (isMojmap(p)) return buildGradleM(p);
     const prof = profile(p);
     return `plugins {
     id 'fabric-loom' version '${prof.loom}'
@@ -275,6 +301,7 @@ jar {
   }
 
   function gradleProps(p) {
+    if (isMojmap(p)) return gradlePropsM(p);
     const prof = profile(p);
     return `org.gradle.jvmargs=-Xmx1G
 minecraft_version=${p.meta.mcVersion}
@@ -318,6 +345,7 @@ archives_base_name=${p.meta.modId}
   // ════════════════════════════════════════════════════════════════
 
   function modMain(p) {
+    if (isMojmap(p)) return modMainM(p);
     const story = p.story.chapters.length ? "        story.StoryEvents.register();\n" : "";
     return `package ${javaPackage(p)};
 
@@ -350,6 +378,7 @@ ${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${story}
   }
 
   function modBlocks(p) {
+    if (isMojmap(p)) return modBlocksM(p);
     const consts = uniqueConsts(p.blocks.map((b) => b.id));
     let fields = "";
     let regs = "";
@@ -399,6 +428,7 @@ ${regs || "        // niets te registreren"}
   }
 
   function modItems(p) {
+    if (isMojmap(p)) return modItemsM(p);
     const allIds = [
       ...p.items.map((i) => i.id),
       ...p.blocks.map((b) => b.id),
@@ -460,6 +490,7 @@ ${regs || "        // niets te registreren"}
   }
 
   function modEntities(p) {
+    if (isMojmap(p)) return modEntitiesM(p);
     let fields = "";
     let regs = "";
     for (const m of p.mobs) {
@@ -507,6 +538,7 @@ ${regs}
   }
 
   function entityClass(p, m) {
+    if (isMojmap(p)) return entityClassM(p, m);
     const cn = classname(m.id);
     const gui = m.guiId ? getGuiP(p, m.guiId) : null;
     const guiHandler = gui ? classname(gui.id) + "ScreenHandler" : null;
@@ -620,6 +652,7 @@ ${dropsLines ? dropsLines : "        // TODO: drops instellen in BlockyMod Studi
 
   // ── GUI-klassen ──
   function modScreenHandlers(p) {
+    if (isMojmap(p)) return modScreenHandlersM(p);
     const fields = p.guis.map((g) =>
       `    public static final ScreenHandlerType<${classname(g.id)}ScreenHandler> ${constname(g.id)} =
             ScreenHandlerRegistry.registerSimple(ModMain.id("${g.id}"), ${classname(g.id)}ScreenHandler::new);`
@@ -647,6 +680,7 @@ ${fields}
   }
 
   function screenHandler(p, g) {
+    if (isMojmap(p)) return screenHandlerM(p, g);
     const cn = classname(g.id);
     const inputs = g.elements.filter((e) => e.type === "slot" && e.role === "input").sort((a, b) => a.index - b.index);
     const outputs = g.elements.filter((e) => e.type === "slot" && e.role === "output");
@@ -799,6 +833,7 @@ ${addLines || "        // geen slots – voeg ze toe in de GUI-ontwerper"}
   }
 
   function screenClass(p, g) {
+    if (isMojmap(p)) return screenClassM(p, g);
     const cn = classname(g.id);
     const labels = g.elements.filter((e) => e.type === "label");
     const buttons = g.elements.filter((e) => e.type === "button");
@@ -869,6 +904,7 @@ ${labelLines ? labelLines : ""}
   }
 
   function modClient(p) {
+    if (isMojmap(p)) return modClientM(p);
     const screenRegs = p.guis.map((g) =>
       `        HandledScreens.register(ModScreenHandlers.${constname(g.id)}, ${classname(g.id)}Screen::new);`
     ).join("\n");
@@ -934,7 +970,7 @@ ${renderRegs || "        // geen mobs om te registreren"}
       count: r.count || 1
     };
     if (!out.item) return null;
-    const result121 = is121(p);
+    const result121 = usesNewDirs(p);
     const resultField = result121 ? { id: out.item, count: out.count } : out;
 
     if (r.type === "shaped") {
@@ -1007,6 +1043,7 @@ ${renderRegs || "        // geen mobs om te registreren"}
   // ════════════════════════════════════════════════════════════════
 
   function storyManager(p) {
+    if (isMojmap(p)) return storyManagerM(p);
     const ns = p.meta.modId;
     const guiImports = new Set();
     // open_gui-acties → handler-klassen
@@ -1308,6 +1345,7 @@ ${p.guis.filter((g) => guiImports.has(g)).map((g) =>
   }
 
   function storyEvents(p) {
+    if (isMojmap(p)) return storyEventsM(p);
     return `package ${javaPackage(p)}.story;
 
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityCombatEvents;
@@ -1356,6 +1394,1023 @@ public final class StoryEvents {
         // Locatie-triggers (elke seconde)
         ServerTickEvents.END_WORLD_TICK.register(world ->
                 StoryManager.INSTANCE.onWorldTick(world));
+    }
+}
+`;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  MODERNE TEMPLATES – officiële Mojang-mappings (Minecraft 26.x)
+  //  Bron: docs.fabricmc.net (26.2-voorbeelden) + Fabric-release-notes
+  // ════════════════════════════════════════════════════════════════
+
+  function buildGradleM(p) {
+    const prof = profile(p);
+    return `plugins {
+    id 'fabric-loom' version '${prof.loom}'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    // voeg hier extra maven-repos toe indien nodig
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:\${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:\${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:\${project.fabric_version}"
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand "version": inputs.properties.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = ${prof.java}
+    it.options.encoding = 'UTF-8'
+}
+
+java {
+    withSourcesJar()
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(${prof.java})
+    }
+}
+
+jar {
+    from("LICENSE") {
+        rename { "\${it}_\${project.base.archivesName.get()}" }
+    }
+}
+`;
+  }
+
+  function gradlePropsM(p) {
+    const prof = profile(p);
+    return `org.gradle.jvmargs=-Xmx2G
+org.gradle.parallel=true
+
+minecraft_version=${p.meta.mcVersion}
+loader_version=${prof.loader}
+fabric_version=${prof.fabric}
+
+mod_version=${p.meta.version}
+maven_group=${javaPackage(p)}
+archives_base_name=${p.meta.modId}
+`;
+  }
+
+  function modMainM(p) {
+    const gui = p.guis.length ? "        gui.ModScreenHandlers.initialize();\n" : "";
+    const creative = "        CreativeTab.initialize(); // ⚠️ zie CreativeTab.java\n";
+    const story = p.story.chapters.length ? "        story.StoryEvents.register();\n" : "";
+    return `package ${javaPackage(p)};
+
+import net.fabricmc.api.ModInitializer;
+import net.minecraft.resources.ResourceLocation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Hoofdklasse van ${p.meta.name} – gegenereerd door BlockyMod Studio.
+ * Doelversie: Minecraft ${p.meta.mcVersion} (officiële Mojang-mappings).
+ */
+public class ModMain implements ModInitializer {
+    public static final String MOD_ID = "${p.meta.modId}";
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+    }
+
+    @Override
+    public void onInitialize() {
+        ModBlocks.initialize();
+        ModItems.initialize();
+        ModEntities.initialize();
+${gui}${creative}${story}
+        LOGGER.info("[{}] geïnitialiseerd – veel bouwplezier!", MOD_ID);
+    }
+}
+`;
+  }
+
+  function modBlocksM(p) {
+    const fields = p.blocks.map((b) => {
+      const resistance = (Math.round((b.hardness || 1) * 5 * 10) / 10).toFixed(1);
+      const sound = soundGroup(b);
+      const lines = [
+        `    public static final Block ${constname(b.id)} = registerBlock("${b.id}", Block::new,`,
+        `            BlockBehaviour.Properties.of()`,
+        `                    .strength(${(b.hardness ?? 1).toFixed(1)}F, ${resistance}F)`
+      ];
+      if (b.requiresTool) lines.push(`                    .requiresCorrectToolForDrops()`);
+      if (b.light > 0) lines.push(`                    .lightLevel(state -> ${b.light})`);
+      lines.push(`                    .sound(SoundType.${sound}));`);
+      return lines.join("\n");
+    }).join("\n\n");
+
+    const regs = p.blocks.map((b) =>
+      `        // "${b.id}" – registratie gebeurt via de statische velden (zie initialize())`).join("\n");
+
+    return `package ${javaPackage(p)};
+
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BlockBehaviour;
+import net.minecraft.world.level.block.SoundType;
+
+/**
+ * Alle blokken van deze mod.
+ * ⛏ = blok-eigenschappen pas je hier aan (hardheid, licht, etc.)
+ */
+public final class ModBlocks {
+    private ModBlocks() {}
+
+${fields || "    // (nog geen blokken – maak er een in BlockyMod Studio!)"}
+
+    /** Registreert een blok met verplichte registry-key (1.21.2+ / 26.x). */
+    private static Block registerBlock(String path,
+            java.util.function.Function<BlockBehaviour.Properties, Block> factory,
+            BlockBehaviour.Properties properties) {
+        ResourceKey<Block> key = ResourceKey.create(Registries.BLOCK, ModMain.id(path));
+        return Registry.register(BuiltInRegistries.BLOCK, key, factory.apply(properties.setId(key)));
+    }
+
+    public static void initialize() {
+${p.blocks.length ? (regs || "        // geladen via statische velden") : "        // niets te registreren"}
+    }
+}
+`;
+  }
+
+  function modItemsM(p) {
+    const blockItems = p.blocks.map((b) =>
+      `    public static final BlockItem ${constname(b.id)} = registerBlockItem("${b.id}", ModBlocks.${constname(b.id)});`
+    ).join("\n");
+    const plainItems = p.items.map((it) =>
+      `    public static final Item ${constname(it.id)} = registerItem("${it.id}", props -> new Item(props.stacksTo(${it.maxStack || 64})));`
+    ).join("\n");
+    const eggs = p.mobs.map((m) =>
+      `    public static final Item ${constname(m.id)}_SPAWN_EGG = registerItem("${m.id}_spawn_egg",
+            props -> new SpawnEggItem(ModEntities.${constname(m.id)}, 0x${padHex(m.colors ? m.colors.primary : "ffffff")}, 0x${padHex(m.colors ? m.colors.secondary : "aaaaaa")}, props)); // ⚠️ als de kleur-ctor weg is: vraag de AI om de component-vorm`
+    ).join("\n");
+
+    const parts = [blockItems, plainItems, eggs].filter(Boolean).join("\n");
+
+    return `package ${javaPackage(p)};
+
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.level.block.Block;
+
+/**
+ * Alle items van deze mod (incl. blok-items en spawn-eggs).
+ * Items/blokken krijgen automatisch de juiste translation-key.
+ */
+public final class ModItems {
+    private ModItems() {}
+
+${parts || "    // (nog geen items)"}
+
+    private static Item registerItem(String path,
+            java.util.function.Function<Item.Properties, Item> factory) {
+        ResourceKey<Item> key = ResourceKey.create(Registries.ITEM, ModMain.id(path));
+        Item item = factory.apply(new Item.Properties().setId(key));
+        Registry.register(BuiltInRegistries.ITEM, key, item);
+        return item;
+    }
+
+    private static BlockItem registerBlockItem(String path, Block block) {
+        ResourceKey<Item> key = ResourceKey.create(Registries.ITEM, ModMain.id(path));
+        BlockItem item = new BlockItem(block, new Item.Properties().useBlockDescriptionPrefix().setId(key));
+        Registry.register(BuiltInRegistries.ITEM, key, item);
+        return item;
+    }
+
+    public static void initialize() {
+        // geladen via statische velden
+    }
+}
+`;
+  }
+
+  function modEntitiesM(p) {
+    const fields = p.mobs.map((m) => {
+      const group = m.kind === "hostile" ? "MONSTER" : "CREATURE";
+      return `    public static final EntityType<${classname(m.id)}Entity> ${constname(m.id)} = register("${m.id}",
+            EntityType.Builder.<${classname(m.id)}Entity>of(${classname(m.id)}Entity::new, MobCategory.${group})
+                    .sized(${(m.width || 0.9).toFixed(2)}F, ${(m.height || 1.4).toFixed(2)}F)
+                    .clientTrackingRange(8)
+                    .updateInterval(3));`;
+    }).join("\n\n");
+
+    const attrs = p.mobs.map((m) =>
+      `        FabricDefaultAttributeRegistry.register(${constname(m.id)}, ${classname(m.id)}Entity.createAttributes());`
+    ).join("\n");
+
+    return `package ${javaPackage(p)};
+
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
+${p.mobs.map((m) => `import ${javaPackage(p)}.entity.${classname(m.id)}Entity;`).join("\n")}
+
+/**
+ * Alle mobs van deze mod.
+ */
+public final class ModEntities {
+    private ModEntities() {}
+
+${fields || "    // (nog geen mobs – maak er een in BlockyMod Studio!)"}
+
+    private static <T extends net.minecraft.world.entity.Entity> EntityType<T> register(
+            String path, EntityType.Builder<T> builder) {
+        ResourceKey<EntityType<T>> key = ResourceKey.create(Registries.ENTITY_TYPE, ModMain.id(path));
+        return Registry.register(BuiltInRegistries.ENTITY_TYPE, key, builder.build(key));
+    }
+
+    public static void initialize() {
+${p.mobs.length ? attrs : "        // niets te registreren"}
+    }
+}
+`;
+  }
+
+  function entityClassM(p, m) {
+    const cn = classname(m.id);
+    const gui = m.guiId ? getGuiP(p, m.guiId) : null;
+    const guiMenu = gui ? classname(gui.id) + "Menu" : null;
+    const dropRefs = (m.drops || []).filter((d) => d.id).map((d) => ({ d, ref: itemRef(p, d.id) }));
+    const needsModItems = dropRefs.some(({ ref }) => ref.startsWith("ModItems."));
+    const dropsLines = dropRefs.map(({ d, ref }) =>
+      `        if (RNG.nextFloat() <= ${(d.chance ?? 1).toFixed(2)}F) {
+            this.spawnAtLocation(new ItemStack(${ref}, ${Math.max(1, d.count || 1)}));
+        }`).join("\n");
+
+    const interact = guiMenu ? `
+    /**
+     * Rechtermuisklik op de mob → opent je GUI "${gui.name}".
+     */
+    @Override
+    protected InteractionResult mobInteract(Player player, InteractionHand hand) {
+        if (!this.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
+            serverPlayer.openMenu(new SimpleMenuProvider(
+                    (syncId, inv, p2) -> new ${guiMenu}(syncId, inv),
+                    Component.literal("${escapeJava(gui.name)}")));
+            return InteractionResult.sidedSuccess(this.level().isClientSide);
+        }
+        return super.mobInteract(player, hand);
+    }
+` : "";
+
+    return `package ${javaPackage(p)}.entity;
+
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.SimpleMenuProvider;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+${guiMenu ? `import ${javaPackage(p)}.gui.${guiMenu};` : ""}
+${needsModItems ? `import ${javaPackage(p)}.ModItems;` : ""}
+
+import java.util.Random;
+
+/**
+ * ${m.name} – mod-mob gegenereerd door BlockyMod Studio (Mojang-mappings).
+ * ${gui ? "Op rechtermuisklik opent: " + gui.name : "Standaard-gedrag (vraag de AI voor meer acties)."}
+ */
+public class ${cn}Entity extends Pig {
+    private static final Random RNG = new Random();
+
+    public ${cn}Entity(EntityType<? extends Pig> entityType, Level level) {
+        super(entityType, level);
+    }
+
+    /** Basis-attributen (leven, snelheid, aanval). */
+    public static AttributeSupplier.Builder createAttributes() {
+        return Pig.createAttributes()
+                .add(Attributes.MAX_HEALTH, ${(m.health || 20).toFixed(1)}F)
+                .add(Attributes.MOVEMENT_SPEED, ${(m.speed || 0.25).toFixed(3)}F)
+                .add(Attributes.ATTACK_DAMAGE, ${(m.damage || 3).toFixed(1)}F);
+    }
+${interact}
+    /** Drops bij dood. */
+    @Override
+    protected void dropCustomDeathLoot(DamageSource source, int looting, boolean recentlyHitByPlayer) {
+        super.dropCustomDeathLoot(source, looting, recentlyHitByPlayer);
+        if (this.level().isClientSide) return;
+${dropsLines || "        // TODO: drops instellen in BlockyMod Studio (tab Mobs) of in ai-code/"}
+    }
+}
+`;
+  }
+
+  function modScreenHandlersM(p) {
+    const fields = p.guis.map((g) =>
+      `    public static final MenuType<${classname(g.id)}Menu> ${constname(g.id)} = register("${g.id}", ${classname(g.id)}Menu::new);`
+    ).join("\n");
+    return `package ${javaPackage(p)}.gui;
+
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.inventory.MenuType;
+
+/**
+ * Registreert alle GUI's (menu's) van deze mod.
+ * ⚠️ Compilefout op MenuType? → Copy-paste de fout in chat, ik fix hem in ai-code/.
+ */
+public final class ModScreenHandlers {
+    private ModScreenHandlers() {}
+
+${fields}
+
+    private static <T extends net.minecraft.world.inventory.AbstractContainerMenu> MenuType<T> register(
+            String path, MenuType.MenuFactory<T> factory) {
+        ResourceKey<MenuType<T>> key = ResourceKey.create(Registries.MENU, ModMain.id(path));
+        return Registry.register(BuiltInRegistries.MENU, key, new MenuType<>(factory));
+    }
+
+    public static void initialize() {
+        // geladen via statische velden
+    }
+}
+`;
+  }
+
+  function screenHandlerM(p, g) {
+    const cn = classname(g.id);
+    const inputs = g.elements.filter((e) => e.type === "slot" && e.role === "input").sort((a, b) => a.index - b.index);
+    const outputs = g.elements.filter((e) => e.type === "slot" && e.role === "output");
+    const players = g.elements.filter((e) => e.type === "slot" && e.role === "player");
+
+    if (g.mode === "crafting") {
+      const posRows = [];
+      for (const o of outputs) posRows.push(`            {124, 35, ${o.x}, ${o.y}}, // uitvoer`);
+      inputs.forEach((s) => {
+        const col = s.index % 3, row = Math.floor(s.index / 3);
+        posRows.push(`            {${30 + col * 18}, ${17 + row * 18}, ${s.x}, ${s.y}}, // invoer ${s.index}`);
+      });
+      for (const s of players) {
+        const isHotbar = s.index < 9;
+        const vx = 8 + (s.index % 9) * 18;
+        const vy = isHotbar ? 142 : 84 + Math.floor((s.index - 9) / 9) * 18;
+        posRows.push(`            {${vx}, ${vy}, ${s.x}, ${s.y}}, // speler inv ${s.index}`);
+      }
+      const posTable = posRows.length ? `
+    /** Slotposities: {vanillaX, vanillaY, ontwerpX, ontwerpY} */
+    private static final int[][] SLOT_POS = {
+${posRows.join("\n")}
+    };
+` : "";
+
+      return `package ${javaPackage(p)}.gui;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.level.Level;
+
+/**
+ * Werkbank-GUI "${g.name}" (modus: crafting → werkt met alle recepten uit de tab Werkbanken).
+ * Slots worden na super() naar jouw ontwerp-positie verplaatst.
+ */
+public class ${cn}Menu extends CraftingMenu {${posTable}
+    public ${cn}Menu(int id, Inventory inventory) {
+        this(id, inventory, inventory.player.level(), BlockPos.ZERO);
+    }
+
+    public ${cn}Menu(int id, Inventory inventory, Level level, BlockPos pos) {
+        super(id, inventory, level, pos);
+${posRows.length ? `        // 🔧 Verplaats slots naar jouw ontwerp (match op de originele vanilla-positie)
+        int[][] origineel = new int[this.slots.size()][2];
+        for (int i = 0; i < this.slots.size(); i++) {
+            Slot s = this.slots.get(i);
+            origineel[i][0] = s.x;
+            origineel[i][1] = s.y;
+        }
+        for (int[] q : SLOT_POS) {
+            for (int i = 0; i < this.slots.size(); i++) {
+                if (origineel[i][0] == q[0] && origineel[i][1] == q[1]) {
+                    Slot slot = this.slots.get(i);
+                    slot.x = q[2];
+                    slot.y = q[3];
+                    break;
+                }
+            }
+        }` : "        // geen aanpassingen"}
+    }
+
+    /** Werkt altijd – ook als een mob de GUI opent. */
+    @Override
+    public boolean stillValid(Player player) {
+        return true;
+    }
+}
+`;
+    }
+
+    // ── Vrije modus ──
+    const content = [...inputs, ...outputs];
+    const contentSize = content.length;
+    let addLines = "";
+    content.forEach((s, i) => {
+      addLines += `        this.addSlot(new Slot(content, ${i}, ${s.x}, ${s.y})); // ${s.role}\n`;
+    });
+    players.sort((a, b) => a.index - b.index).forEach((s) => {
+      addLines += `        this.addSlot(new Slot(playerInventory, ${s.index}, ${s.x}, ${s.y})); // speler ${s.index}\n`;
+    });
+
+    return `package ${javaPackage(p)}.gui;
+
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.SimpleContainer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.inventory.Slot;
+
+/**
+ * Vrij GUI "${g.name}" (modus: free).
+ * Koppel hier in ai-code/ jouw eigen logica (bijv. kopen, verkopen, smeden).
+ */
+public class ${cn}Menu extends AbstractContainerMenu {
+    private final SimpleContainer content = new SimpleContainer(${Math.max(1, contentSize)});
+
+    public ${cn}Menu(int id, Inventory playerInventory) {
+        super(ModScreenHandlers.${constname(g.id)}, id);
+
+${addLines || "        // geen slots – voeg ze toe in de GUI-ontwerper"}
+    }
+
+    /** Snel-verplaatsen (shift-klik) tussen speler en GUI. */
+    @Override
+    public ItemStack quickMoveStack(Player player, int index) {
+        ItemStack newStack = ItemStack.EMPTY;
+        Slot slot = this.slots.get(index);
+        if (slot != null && slot.hasItem()) {
+            ItemStack current = slot.getItem();
+            newStack = current.copy();
+            if (index < ${contentSize}) {
+                if (!this.moveItemStackTo(current, ${contentSize}, this.slots.size(), true)) {
+                    return ItemStack.EMPTY;
+                }
+            } else if (!this.moveItemStackTo(current, 0, ${contentSize}, false)) {
+                return ItemStack.EMPTY;
+            }
+            if (current.isEmpty()) {
+                slot.set(ItemStack.EMPTY);
+            } else {
+                slot.setChanged();
+            }
+            if (current.getCount() == newStack.getCount()) {
+                return ItemStack.EMPTY;
+            }
+            slot.onTake(player, current);
+        }
+        return newStack;
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        return true;
+    }
+
+    /** Inhoud van de GUI-slots (voor jouw eigen logica). */
+    public SimpleContainer getContent() {
+        return content;
+    }
+}
+`;
+  }
+
+  function screenClassM(p, g) {
+    const cn = classname(g.id);
+    const labels = g.elements.filter((e) => e.type === "label");
+    const buttons = g.elements.filter((e) => e.type === "button");
+    const labelLines = labels.map((l) =>
+      `        g.drawString(this.font, "${escapeJava(l.text)}", this.leftPos + ${l.x}, this.topPos + ${l.y}, 0x${javaColor(l.color)}, false);`
+    ).join("\n");
+    const buttonLines = buttons.map((b) =>
+      `        this.addRenderableWidget(Button.builder(Component.literal("${escapeJava(b.text)}"), button -> {
+            // TODO: jouw actie hier (of laat de AI dit in ai-code/ invullen)
+        }).bounds(this.leftPos + ${b.x}, this.topPos + ${b.y}, ${b.w || 100}, ${b.h || 20}).build());`
+    ).join("\n");
+
+    return `package ${javaPackage(p)}.client;
+
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
+import pkg.ModMain;
+import pkg.gui.${cn}Menu;
+
+/**
+ * Scherm voor "${g.name}" – tekent je zelf-ontworpen GUI-textuur.
+ */
+@Environment(EnvType.CLIENT)
+public class ${cn}Screen extends AbstractContainerScreen<${cn}Menu> {
+    private static final ResourceLocation TEXTURE = ModMain.id("textures/gui/${g.id}.png");
+
+    public ${cn}Screen(${cn}Menu menu, Inventory inventory, Component title) {
+        super(menu, inventory, title);
+        this.imageWidth = ${g.width};
+        this.imageHeight = ${g.height};
+        this.titleLabelX = 4000; // verberg de standaard-titel (wij tekenen onze eigen labels)
+    }
+
+    @Override
+    protected void init() {
+        super.init();
+${buttonLines ? buttonLines + "\n" : "        // geen knoppen in dit GUI-ontwerp"}
+    }
+
+    @Override
+    protected void renderBg(GuiGraphics g, float partialTick, int mouseX, int mouseY) {
+        g.blit(TEXTURE, this.leftPos, this.topPos, 0, 0, this.imageWidth, this.imageHeight);
+${labelLines ? labelLines : ""}
+    }
+
+    @Override
+    protected void renderSlot(GuiGraphics g, Slot slot) {
+        // De slot-achtergrond zit al in je eigen textuur – teken alleen het item.
+        g.renderItem(slot.getItem(), slot.x, slot.y);
+        g.renderItemDecorations(this.font, slot.getItem(), slot.x, slot.y);
+    }
+
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
+        super.render(g, mouseX, mouseY, delta);
+        this.renderTooltip(g, mouseX, mouseY);
+    }
+}
+`;
+  }
+
+  function modClientM(p) {
+    const screenRegs = p.guis.map((g) =>
+      `        MenuScreens.register(ModScreenHandlers.${constname(g.id)}, ${classname(g.id)}Screen::new);`
+    ).join("\n");
+    const renderRegs = p.mobs.map((m) =>
+      `        // TODO: eigen model/texture? Vraag de AI! (nu: varken-look als voorbeeld)
+        EntityRendererRegistry.register(ModEntities.${constname(m.id)}, PigRenderer::new);`
+    ).join("\n");
+    const imports = new Set([
+      "import net.fabricmc.api.ClientModInitializer;",
+      `import ${javaPackage(p)}.ModMain;`
+    ]);
+    if (p.guis.length) {
+      imports.add("import net.minecraft.client.gui.screens.MenuScreens;");
+      imports.add(`import ${javaPackage(p)}.gui.ModScreenHandlers;`);
+    }
+    if (p.mobs.length) {
+      imports.add("import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;");
+      imports.add("import net.minecraft.client.render.entity.PigRenderer;");
+      imports.add(`import ${javaPackage(p)}.ModEntities;`);
+    }
+
+    return `package ${javaPackage(p)}.client;
+
+${[...imports].join("\n")}
+
+/**
+ * Client-registratie: schermen (GUI's) en mob-renderers.
+ */
+public class ModClient implements ClientModInitializer {
+    @Override
+    public void onInitializeClient() {
+${screenRegs || "        // geen GUI's om te registreren"}
+${renderRegs || "        // geen mobs om te registreren"}
+        ModMain.LOGGER.debug("Client geladen.");
+    }
+}
+`;
+  }
+
+  function creativeTabM(p) {
+    const blockAccepts = p.blocks.map((b) => `                    tab.accept(ModBlocks.${constname(b.id)}.asItem());`).join("\n");
+    const itemAccepts = [
+      ...p.items.map((it) => `                    tab.accept(ModItems.${constname(it.id)});`),
+      ...p.mobs.map((m) => `                    tab.accept(ModItems.${constname(m.id)}_SPAWN_EGG);`)
+    ].join("\n");
+    const blocksTab = p.blocks.length ? `
+        CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.BUILDING_BLOCKS)
+                .register(tab -> {
+${blockAccepts}
+                });` : "";
+    const itemsTab = (p.items.length || p.mobs.length) ? `
+        CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.${p.mobs.length && !p.items.length ? "SPAWN_EGGS" : "INGREDIENTS"})
+                .register(tab -> {
+${itemAccepts}
+                });` : "";
+
+    return `package ${javaPackage(p)};
+
+import net.fabricmc.fabric.api.itemgroup.v1.CreativeModeTabEvents;
+import net.minecraft.world.item.CreativeModeTabs;
+
+/**
+ * Zet alles in de creatieve-modus-tabbladen zodat je het direct terugvindt.
+ *
+ * ⚠️ ALS DIT COMPILATIEFOUTEN GEEFT (API hernoemd in een update):
+ *    1. verwijder dit bestand,
+ *    2. verwijder de regel "CreativeTab.initialize();" uit ModMain,
+ *    3. vraag de AI in de chat om een fix → die zet ik in ai-code/.
+ */
+public final class CreativeTab {
+    private CreativeTab() {}
+
+    public static void initialize() {${blocksTab || ""}
+${itemsTab || "        // geen losse items"}
+    }
+}
+`;
+  }
+
+  function storyManagerM(p) {
+    const ns = p.meta.modId;
+    const guiImports = new Set();
+    for (const ch of p.story.chapters)
+      for (const ev of ch.events || [])
+        for (const a of ev.actions || [])
+          if (a.type === "gui" && a.gui) {
+            const g = getGuiP(p, a.gui);
+            if (g) guiImports.add(g);
+          }
+
+    return `package ${javaPackage(p)}.story;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.SimpleMenuProvider;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
+import ${javaPackage(p)}.ModMain;
+${[...guiImports].map((g) => `import ${javaPackage(p)}.gui.${classname(g.id)}Menu;`).join("\n")}
+
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Leest data/${ns}/story/storyline.json en voert acties uit.
+ *
+ * ⚠️ TODO (vraag de AI of bouw zelf in ai-code/):
+ *   - voortgang opslaan zodat hij een herstart overleeft
+ *   - meer trigger-types / voorwaarden
+ */
+public final class StoryManager {
+    public static final StoryManager INSTANCE = new StoryManager();
+
+    public static class Event {
+        public String id;
+        public JsonObject trigger;
+        public List<JsonObject> actions = new ArrayList<>();
+    }
+
+    public static class Chapter {
+        public String id;
+        public String title;
+        public List<Event> events = new ArrayList<>();
+    }
+
+    public static class Progress {
+        public int chapterIndex = 0;
+        public final Set<String> done = new HashSet<>();
+    }
+
+    private final Map<UUID, Progress> progress = new HashMap<>();
+    private List<Chapter> chapters = List.of();
+    private boolean loaded = false;
+
+    private StoryManager() {}
+
+    /** (Her)laad de verhaallijn van de server. */
+    public synchronized void load(MinecraftServer server) {
+        try {
+            ResourceLocation id = ModMain.id("story/storyline.json");
+            var resource = server.getResourceManager().getResource(id);
+            try (InputStream in = resource.get().open()) {
+                JsonObject root = new Gson().fromJson(
+                        new InputStreamReader(in, StandardCharsets.UTF_8), JsonObject.class);
+                chapters = parse(root);
+                loaded = true;
+                ModMain.LOGGER.info("[Story] {} hoofdstukken geladen.", chapters.size());
+            }
+        } catch (Exception e) {
+            ModMain.LOGGER.warn("[Story] storyline.json kon niet geladen worden: {}", e.getMessage());
+            chapters = List.of();
+            loaded = true;
+        }
+    }
+
+    private List<Chapter> parse(JsonObject root) {
+        List<Chapter> out = new ArrayList<>();
+        JsonArray arr = root.has("chapters") ? root.getAsJsonArray("chapters") : new JsonArray();
+        for (JsonElement el : arr) {
+            JsonObject c = el.getAsJsonObject();
+            Chapter ch = new Chapter();
+            ch.id = getStr(c, "id", "hoofdstuk");
+            ch.title = getStr(c, "title", ch.id);
+            if (c.has("events")) {
+                for (JsonElement ee : c.getAsJsonArray("events")) {
+                    JsonObject eo = ee.getAsJsonObject();
+                    Event ev = new Event();
+                    ev.id = getStr(eo, "id", ch.id + "_" + Math.abs(eo.hashCode()));
+                    ev.trigger = eo.has("trigger") ? eo.getAsJsonObject("trigger") : new JsonObject();
+                    if (eo.has("actions"))
+                        for (JsonElement ae : eo.getAsJsonArray("actions"))
+                            ev.actions.add(ae.getAsJsonObject());
+                    ch.events.add(ev);
+                }
+            }
+            out.add(ch);
+        }
+        return out;
+    }
+
+    private static String getStr(JsonObject o, String k, String def) {
+        return o.has(k) && !o.get(k).isJsonNull() ? o.get(k).getAsString() : def;
+    }
+
+    public Progress getProgress(UUID uuid) {
+        return progress.computeIfAbsent(uuid, u -> new Progress());
+    }
+
+    // ── Triggers ──
+
+    public void onJoin(ServerPlayer player) {
+        ensureLoaded(player);
+        Progress pr = getProgress(player.getUuid());
+        if (pr.chapterIndex == 0 && pr.done.isEmpty()) {
+            runTrigger(player, "join");
+        }
+    }
+
+    public void onKill(ServerPlayer killer, net.minecraft.world.entity.Entity killed) {
+        ensureLoaded(killer);
+        ResourceLocation typeId = BuiltInRegistries.ENTITY_TYPE.getKey(killed.getType());
+        runTrigger(killer, "kill", "entity", String.valueOf(typeId));
+    }
+
+    public void onInteractBlock(ServerPlayer player, BlockHitResult hit) {
+        ensureLoaded(player);
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(
+                player.level().getBlockState(hit.getBlockPos()).getBlock());
+        runTrigger(player, "block", "block", String.valueOf(blockId));
+    }
+
+    public void onInteractItem(ServerPlayer player, ItemStack stack) {
+        ensureLoaded(player);
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        runTrigger(player, "item", "item", String.valueOf(itemId));
+    }
+
+    public void onWorldTick(ServerLevel level) {
+        if (!loaded) load(level.getServer());
+        if (level.getGameTime() % 20 != 0) return;
+        for (ServerPlayer player : level.players()) {
+            Progress pr = getProgress(player.getUuid());
+            Chapter ch = currentChapter(pr);
+            if (ch == null) continue;
+            for (Event ev : ch.events) {
+                if (matchLocation(player, ev.trigger)) {
+                    runEvent(player, ev);
+                }
+            }
+        }
+    }
+
+    private void ensureLoaded(ServerPlayer player) {
+        if (!loaded) load(player.getServer());
+    }
+
+    private Chapter currentChapter(Progress pr) {
+        if (pr.chapterIndex < 0 || pr.chapterIndex >= chapters.size()) return null;
+        return chapters.get(pr.chapterIndex);
+    }
+
+    private boolean matchLocation(Player player, JsonObject trigger) {
+        if (trigger == null || !"location".equals(getStr(trigger, "type", ""))) return false;
+        double x = trigger.has("x") ? trigger.get("x").getAsDouble() : 0;
+        double y = trigger.has("y") ? trigger.get("y").getAsDouble() : 0;
+        double z = trigger.has("z") ? trigger.get("z").getAsDouble() : 0;
+        double r = trigger.has("r") ? trigger.get("r").getAsDouble() : 4;
+        double dx = player.getX() - x, dy = player.getY() - y, dz = player.getZ() - z;
+        return dx * dx + dy * dy + dz * dz <= r * r;
+    }
+
+    /** Zoek passende events in het huidige hoofdstuk en voer ze uit. */
+    public void runTrigger(ServerPlayer player, String type, String field, String value) {
+        Progress pr = getProgress(player.getUuid());
+        Chapter ch = currentChapter(pr);
+        if (ch == null) return;
+        for (Event ev : ch.events) {
+            if (pr.done.contains(ev.id)) continue;
+            String t = getStr(ev.trigger, "type", "");
+            if (!type.equals(t)) continue;
+            if (field != null && !value.equals(getStr(ev.trigger, field, ""))) continue;
+            runEvent(player, ev);
+        }
+    }
+
+    public void runTrigger(ServerPlayer player, String type) {
+        runTrigger(player, type, null, null);
+    }
+
+    /** Voer alle acties van een event uit. */
+    public void runEvent(ServerPlayer player, Event ev) {
+        Progress pr = getProgress(player.getUuid());
+        if (pr.done.contains(ev.id)) return;
+        pr.done.add(ev.id);
+        for (JsonObject action : ev.actions) {
+            execute(player, action);
+        }
+    }
+
+    private void execute(ServerPlayer player, JsonObject a) {
+        String type = getStr(a, "type", "");
+        Level level = player.level();
+        switch (type) {
+            case "message" -> player.sendSystemMessage(Component.literal(getStr(a, "text", "")));
+            case "give" -> {
+                String itemId = getStr(a, "item", "minecraft:stone");
+                int count = a.has("count") ? a.get("count").getAsInt() : 1;
+                var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(itemId)).orElse(null);
+                if (item != null && item != Items.AIR) {
+                    player.getInventory().add(new ItemStack(item, count));
+                    player.displayClientMessage(Component.literal("+ " + count + " × " + itemId), true);
+                }
+            }
+            case "weather" -> {
+                String w = getStr(a, "state", "clear");
+                runCommand(player, w.equals("thunder") ? "weather thunder"
+                        : w.equals("rain") ? "weather rain" : "weather clear");
+            }
+            case "time" -> runCommand(player, "time set " + ("night".equals(getStr(a, "state", "day")) ? "night" : "day"));
+            case "spawn" -> {
+                String entityId = getStr(a, "entity", "minecraft:pig");
+                int count = a.has("count") ? a.get("count").getAsInt() : 1;
+                var typeRef = BuiltInRegistries.ENTITY_TYPE.getOptional(ResourceLocation.tryParse(entityId)).orElse(null);
+                var rng = java.util.concurrent.ThreadLocalRandom.current();
+                for (int i = 0; i < count && typeRef != null; i++) {
+                    var entity = typeRef.create(level);
+                    if (entity != null) {
+                        entity.moveTo(
+                                player.getX() + (rng.nextDouble() - 0.5) * 3,
+                                player.getY(),
+                                player.getZ() + (rng.nextDouble() - 0.5) * 3,
+                                rng.nextFloat() * 360f, 0f);
+                        level.addFreshEntity(entity);
+                    }
+                }
+            }
+            case "command" -> runCommand(player, getStr(a, "cmd", "say hallo"));
+            case "gui" -> openGui(player, getStr(a, "gui", ""));
+            case "next" -> {
+                Progress pr = getProgress(player.getUuid());
+                pr.chapterIndex++;
+                Chapter ch = currentChapter(pr);
+                player.sendSystemMessage(Component.literal("§6" + (ch != null ? ch.title : "Einde van het verhaal!")));
+            }
+            default -> ModMain.LOGGER.warn("[Story] onbekende actie: {}", type);
+        }
+    }
+
+    /** Voer een commando uit (op de server). */
+    private void runCommand(ServerPlayer player, String cmd) {
+        if (player.getServer() != null) {
+            player.getServer().getCommands()
+                    .performPrefixedCommand(player.createCommandSourceStack().withPermission(2), cmd);
+        }
+    }
+
+    private void openGui(ServerPlayer player, String guiId) {
+        switch (guiId) {
+${p.guis.filter((g) => guiImports.has(g)).map((g) =>
+        `            case "${g.id}" -> player.openMenu(new SimpleMenuProvider(
+                    (syncId, inv, p2) -> new ${classname(g.id)}Menu(syncId, inv),
+                    Component.literal("${escapeJava(g.name)}")));`).join("\n") || "            // geen GUI's gekoppeld"}
+            default -> ModMain.LOGGER.warn("[Story] onbekend gui: {}", guiId);
+        }
+    }
+}
+`;
+  }
+
+  function storyEventsM(p) {
+    return `package ${javaPackage(p)}.story;
+
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityCombatEvents;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
+
+/**
+ * Koppelt game-gebeurtenissen aan jouw verhaallijn.
+ * Triggers die de app ondersteunt: join, kill, block, item, location.
+ */
+public final class StoryEvents {
+    private StoryEvents() {}
+
+    public static void register() {
+        // Speler logt in
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+                StoryManager.INSTANCE.onJoin(handler.player));
+
+        // Iets doodmaken
+        ServerEntityCombatEvents.AFTER_KILL_OTHER_ENTITY.register((world, entity, killed) -> {
+            if (entity instanceof net.minecraft.server.level.ServerPlayer player) {
+                StoryManager.INSTANCE.onKill(player, killed);
+            }
+        });
+
+        // Blok rechtsklikken
+        UseBlockCallback.EVENT.register((player, level, hand, hitResult) -> {
+            if (!level.isClientSide && player instanceof net.minecraft.server.level.ServerPlayer sp) {
+                StoryManager.INSTANCE.onInteractBlock(sp, hitResult);
+            }
+            return InteractionResult.PASS;
+        });
+
+        // Item rechtsklikken
+        UseItemCallback.EVENT.register((player, level, hand) -> {
+            if (!level.isClientSide && player instanceof net.minecraft.server.level.ServerPlayer sp) {
+                StoryManager.INSTANCE.onInteractItem(sp, player.getItemInHand(hand));
+            }
+            return InteractionResultHolder.pass(player.getItemInHand(hand));
+        });
+
+        // Locatie-triggers (elke seconde)
+        ServerTickEvents.END_WORLD_TICK.register(level ->
+                StoryManager.INSTANCE.onWorldTick(level));
     }
 }
 `;
@@ -1415,7 +2470,7 @@ public final class StoryEvents {
     return { textFiles, textures };
   }
 
-  return { buildTextFiles, collectTextures, exportPlan, MC_PROFILES };
+  return { buildTextFiles, collectTextures, exportPlan, MC_PROFILES, VERSION_OPTIONS };
 })();
 
 if (typeof module !== "undefined") module.exports = { Exporters };

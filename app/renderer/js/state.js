@@ -46,7 +46,7 @@ const State = (() => {
         version: "1.0.0",
         author: author || "Modder",
         package: "com." + sanitizeId(author || "modder") + "." + modId,
-        mcVersion: "1.20.1",
+        mcVersion: "26.3",
         loader: "fabric",
         created: Date.now()
       },

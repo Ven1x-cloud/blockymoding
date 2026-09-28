@@ -14,15 +14,43 @@ dat je één regel code hoeft te typen. De app genereert een complete
 
 ## 🚀 Starten op Windows
 
-**Optie 1 – Electron-app (aanbevolen)**
+**Optie 1 – via de command prompt (downloaden + starten)**
+
+> Heb je [Git](https://git-scm.com/download/win) + [Node.js](https://nodejs.org)? Plak dit in `cmd`:
+>
+> ```bat
+> git clone -b arena/01a0e754-blockymoding https://github.com/Ven1x-cloud/blockymoding.git
+> cd blockymoding\app
+> npm install
+> npm start
+> ```
+>
+> Zonder Git? Dan eerst de ZIP ophalen:
+>
+> ```bat
+> curl -L -o blockymoding.zip https://github.com/Ven1x-cloud/blockymoding/archive/refs/heads/arena/01a0e754-blockymoding.zip
+> tar -xf blockymoding.zip
+> cd blockymoding-arena.01a0e754-blockymoding\app
+> npm install
+> npm start
+> ```
+>
+> *(Na het samenvoegen van de PR naar `main` werkt dezelfde truc met `main` in plaats van de branche-naam.)*
+
+**Optie 2 – Electron-app (dubbelklik)**
 
 > 1. Installeer [Node.js](https://nodejs.org) (één keer)
 > 2. Dubbelklik op **`app\Start.bat`**
-> 3. Klaar – de app opent in een eigen venster
+> 3. Klaar – de app opent in een eigen venster met logo
 
-**Optie 2 – in je browser**
+**Optie 3 – in je browser**
 
 > Dubbelklik op **`app\OpenInBrowser.bat`** (of open `app/renderer/index.html`)
+
+**🖥️ Bureaublad-koppeling**
+
+> Dubbelklik één keer op **`app\MaakBureaubladkoppeling.bat`** – daarna staat
+> **BlockyMod Studio** (met logo-icoon) op je bureaublad.
 
 Alle data wordt lokaal opgeslagen (browser-opslag). Exporteren = één knop → ZIP.
 
@@ -40,7 +68,21 @@ Alle data wordt lokaal opgeslagen (browser-opslag). Exporteren = één knop → 
 | **Verhaal** | Hoofdstukken met triggers (inloggen, mob doden, blok/item rechtsklikken, locatie) en acties (bericht, item, GUI, spawn, weer, tijd, commando, volgend hoofdstuk) |
 | **Export** | Knop **⬇ Exporteer mod** → complete Fabric-mod als ZIP (gradle, Java, texturen, recepten, verhaal-JSON) |
 
-Standaard-target: **Minecraft 1.20.1 / Fabric** (optioneel 1.21.1), Java 17+.
+Standaard-doel: **Minecraft 26.3** – de laatste versie (sept 2026, "Wilderness Bound",
+officiële Mojang-mappings, Java 25). Optioneel ook **1.20.1 / 1.21.1** (Yarn, Java 17/21).
+
+> **Over 26.3:** sinds Minecraft 26.1 gebruikt Fabric officiële Mojang-mappings
+> (Yarn is vervallen). De app genereert daar aparte templates voor – netjes volgens
+> de [Fabric-docs (26.2)](https://docs.fabricmc.net/develop/items/first-item).
+> Omdat Fabric API-namen recent veranderd zijn, kan het voorkomen dat één naam
+> iets anders heet: **plak de compilefout in de chat** en dan fix ik hem in
+> `ai-code/` – daarna haal je de fix met één knop op.
+
+## 🖼️ Logo & bureaublad
+
+- Het app-logo (groene werkbank-cube) zit in de topbar, als favicon én als
+  `app/icon.ico` voor Windows.
+- `app\MaakBureaubladkoppeling.bat` maakt een bureaublad-snelkoppeling met dat icoon.
 
 ---
 

@@ -37,6 +37,7 @@ function ok(cond, msg) {
 // ══════════════════════════════════
 console.log("\n[1] Project aanmaken");
 const p = State.createProject("Test Mod", "Tester");
+p.meta.mcVersion = "1.20.1"; // leg expliciet de stabiele Yarn-doelvast
 ok(p && p.meta.modId === "test_mod", "mod-id afgeleid: " + (p && p.meta.modId));
 ok(State.current() === p, "project is actief");
 
@@ -209,12 +210,89 @@ const tmp = path.join(os.tmpdir(), "blockymod-check.zip");
 fs.writeFileSync(tmp, zipBytes);
 console.log("  → " + tmp);
 
-console.log("\n[8] Lege project-export (geen crash)");
+console.log("\n[8] Lege project-export (geen crash) – nu 26.3 (Mojang-mappings)");
 State.removeProject(p.meta.modId);
 const p2 = State.createProject("Leeg", "Iemand");
+ok(p2.meta.mcVersion === "26.3", "standaard-versie is 26.3 (laatste Minecraft)");
 const emptyFiles = Exporters.buildTextFiles(p2);
 ok(Object.keys(emptyFiles).length > 8, `leeg project → ${Object.keys(emptyFiles).length} bestanden (structuur klopt)`);
 ok(emptyFiles["src/main/java/com/iemand/leeg/ModBlocks.java"].includes("(nog geen blokken"), "lege-blokken-placeholder");
+ok(emptyFiles["gradle.properties"].includes("loader_version=0.19.5"), "26.3 → Fabric Loader 0.19.5");
+ok(emptyFiles["build.gradle"].includes("loom.officialMojangMappings()"), "26.3 → officiële Mojang-mappings");
+ok(!emptyFiles["gradle.properties"].includes("yarn"), "26.3 → geen Yarn-mappings");
+ok(JSON.parse(emptyFiles["src/main/resources/fabric.mod.json"]).depends.java === ">=25", "26.3 → Java >=25");
+
+console.log("\n[9] Volledige export op Minecraft 26.3 (laatste versie)");
+const p3 = State.createProject("Latest Mod", "Tester2"); // mcVersion = 26.3 (standaard)
+p3.blocks.push({ id: "nieuw_blok", name: "Nieuw Blok", hardness: 2, requiresTool: true, tool: "pickaxe", light: 4, pixels: TextureKit.generate("steen", "#7d7d7d", 9) });
+p3.items.push({ id: "nieuw_item", name: "Nieuw Item", maxStack: 16, pixels: TextureKit.generate("ruis", "#b87333", 11) });
+p3.guis.push({
+  id: "winkel", name: "Winkel", width: 176, height: 166, mode: "crafting",
+  bgColor: "#C6C6C6", elements: State.defaultCraftingElements("Winkel")
+});
+p3.workstations.push({
+  id: "winkel_ws", name: "Winkel", blockId: "nieuw_blok", guiId: "winkel",
+  recipes: [{ type: "shaped", cells: ["minecraft:cobblestone", null, null, null, null, null, null, null, null], output: "nieuw_item", count: 1 }]
+});
+p3.mobs.push({
+  id: "nieuw_mob", name: "Nieuwe Mob", kind: "passive", health: 12, speed: 0.3, damage: 2,
+  width: 0.8, height: 1.2, colors: { primary: "#55ff55", secondary: "#222222" },
+  guiId: "winkel", drops: [{ id: "nieuw_item", count: 1, chance: 1 }]
+});
+p3.story.chapters.push({ id: "h1", title: "Start", events: [{ id: "e1", trigger: { type: "join" }, actions: [{ type: "message", text: "Hoi!" }] }] });
+
+const m = Exporters.buildTextFiles(p3);
+ok(Object.keys(m).length > 25, `${Object.keys(m).length} bestanden (26.3)`);
+
+const mMain = m["src/main/java/com/tester2/latest_mod/ModMain.java"];
+ok(mMain.includes("ResourceLocation.fromNamespaceAndPath"), "ModMain → ResourceLocation");
+ok(!mMain.includes("Identifier"), "ModMain geen Yarn-Identifier");
+const mBlocks = m["src/main/java/com/tester2/latest_mod/ModBlocks.java"];
+ok(mBlocks.includes("BuiltInRegistries.BLOCK"), "blokken → BuiltInRegistries");
+ok(mBlocks.includes("properties.setId(key)"), "blokken → registry-key (1.21.2+ verplicht)");
+ok(mBlocks.includes("requiresCorrectToolForDrops()"), "blokken → officiële requiresTool-naam");
+ok(mBlocks.includes("BlockBehaviour.Properties.of()"), "blokken → BlockBehaviour.Properties");
+const mItems = m["src/main/java/com/tester2/latest_mod/ModItems.java"];
+ok(mItems.includes("useBlockDescriptionPrefix()"), "items → blok-prefixed translation key");
+ok(mItems.includes("props.stacksTo(16)"), "items → stacksTo");
+ok(mItems.includes("SpawnEggItem"), "spawn-egg aangemaakt");
+const mEnt = m["src/main/java/com/tester2/latest_mod/ModEntities.java"];
+ok(mEnt.includes("EntityType.Builder.<NieuwMobEntity>of"), "entities → EntityType.Builder");
+ok(mEnt.includes("builder.build(key)"), "entities → build(key)");
+ok(mEnt.includes("MobCategory.CREATURE"), "entities → MobCategory (niet SpawnGroup)");
+const mEntC = m["src/main/java/com/tester2/latest_mod/entity/NieuwMobEntity.java"];
+ok(mEntC.includes("extends Pig"), "mob erft van Pig (officiële naam)");
+ok(mEntC.includes("Attributes.MAX_HEALTH"), "attributes → officiële namen");
+ok(mEntC.includes("mobInteract"), "interactie → mobInteract");
+ok(mEntC.includes("openMenu"), "GUI openen → openMenu");
+ok(mEntC.includes("SimpleMenuProvider"), "SimpleMenuProvider");
+const mMenu = m["src/main/java/com/tester2/latest_mod/gui/WinkelMenu.java"];
+ok(mMenu.includes("extends CraftingMenu"), "menu → CraftingMenu");
+ok(mMenu.includes("stillValid"), "menu → stillValid (niet canUse)");
+ok(mMenu.includes("SLOT_POS"), "menu → slotposities uit ontwerp");
+const mScreen = m["src/main/java/com/tester2/latest_mod/client/WinkelScreen.java"];
+ok(mScreen.includes("AbstractContainerScreen<WinkelMenu>"), "scherm → AbstractContainerScreen");
+ok(mScreen.includes("GuiGraphics"), "scherm → GuiGraphics");
+ok(mScreen.includes("renderBg"), "scherm → renderBg");
+ok(mScreen.includes("g.blit("), "scherm → blit");
+const mClient = m["src/main/java/com/tester2/latest_mod/client/ModClient.java"];
+ok(mClient.includes("MenuScreens.register"), "client → MenuScreens");
+ok(mClient.includes("PigRenderer"), "client → PigRenderer (officiële naam)");
+ok(m["src/main/java/com/tester2/latest_mod/CreativeTab.java"] !== undefined, "CreativeTab.java aanwezig");
+const mStory = m["src/main/java/com/tester2/latest_mod/story/StoryManager.java"];
+ok(mStory.includes("addFreshEntity"), "story → addFreshEntity");
+ok(mStory.includes("BuiltInRegistries.ITEM"), "story → BuiltInRegistries");
+ok(mStory.includes("performPrefixedCommand"), "story → commando-uitvoering");
+ok(mStory.includes("sendSystemMessage"), "story → berichten");
+const mJson = JSON.parse(m["src/main/resources/data/latest_mod/recipe/winkel_ws_01.json"]);
+ok(mJson.result && mJson.result.id === "latest_mod:nieuw_item", "recept-resultaat → id-veld (1.21+)");
+ok(m["src/main/resources/data/latest_mod/loot_table/blocks/nieuw_blok.json"] !== undefined, "loot_table (enkelvoud) voor 26.x");
+ok(m["src/main/resources/fabric.mod.json"].includes('"~26.3"'), "fabric.mod.json → minecraft ~26.3");
+ok(m["README.md"].includes("Mojang-mappings"), "mod-README beschrijft mappings");
+ok(m["README.md"].includes("Gradle 9.4"), "mod-README noemt Gradle 9.4");
+const mZip = Zip.build(Object.entries(m).map(([k, v]) => ({ path: "latest_mod/" + k, data: v })));
+ok(mZip.length > 3000, `26.3-ZIP: ${mZip.length} bytes`);
+State.removeProject(p3.meta.modId);
 
 console.log("\n──────────────────────────────");
 if (failures) {

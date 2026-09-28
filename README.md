@@ -90,27 +90,24 @@ officiële Mojang-mappings, Java 25). Optioneel ook **1.20.1 / 1.21.1** (Yarn, J
 
 ## 🤖 De AI-code workflow (GitHub-knop)
 
-De app **herinnert je bij elke nieuwe mod** om een map in jouw branch te maken
-waar ik (de AI) code voor je in kan zetten:
+De app **herinnert je bij elke nieuwe mod** om een extra map in deze repo te
+maken waar ik (de AI) code voor je in zet — **één map per mod, géén Git nodig**:
 
-```bash
-mkdir ai-code
-echo "# AI-code map" > ai-code/README.md
-git add ai-code
-git commit -m "ai-code map toegevoegd"
-git push -u origin <jouw-branch>
-```
+1. Open <https://github.com/Ven1x-cloud/blockymoding> → **Add file → Create new
+   file** → typ als naam `mods/<jouw-modnaam>/README.md` (de mappen ontstaan
+   vanzelf) → **Commit changes**. *(Of zeg het tegen de AI: "maak de map
+   mods/... aan" – dan doe ik het voor je.)*
+2. **Jij** vraagt mij in de chat om code, bijvoorbeeld:
+   > "Zet in `mods/mijn-mod/` een klasse die de kassa-actie afhandelt"
+3. **Ik** zet die bestanden in jouw map op GitHub.
+4. **Jij** opent de app → tab **🤖 AI-code / GitHub** → eigenaar
+   `Ven1x-cloud`, repo `blockymoding`, branch jouw tak, **Map met AI-codes**
+   = `mods/<jouw-modnaam>` → **Codes ophalen bij GitHub** → de bestanden
+   zitten direct in je volgende export.
 
-Daarna:
-
-1. **Jij** vraagt mij in de chat om code, bijvoorbeeld:
-   > "Zet in `ai-code/` een klasse die de kassa-actie afhandelt"
-2. **Ik** push die bestanden naar de `ai-code/`-map in jouw branch.
-3. **Jij** opent de app → tab **🤖 AI-code / GitHub** →
-   **Codes ophalen bij GitHub** → de bestanden zitten direct in je volgende export.
-
-Vul daar eigenaar/repo/branch/map in (standaard `Ven1x-cloud/blockymoding` →
-`ai-code`). Bij privé-repos: voeg een GitHub-PAT in (wordt alleen lokaal bewaard).
+Bij privé-repos: voeg een GitHub-PAT in (wordt alleen lokaal bewaard).
+Liever tóch met git? `mkdir` / `git add` / `git commit` / `git push` werkt
+ook – maar de browser-route hierboven is het makkelijkst.
 
 ---
 
@@ -122,6 +119,7 @@ blockymoding/
 ├── Start.bat            ← Windows: dubbelklik → installeer + start
 ├── package.json         ← root-scripts: npm install / npm start werken hier
 ├── ai-code/             ← map voor codes die ik voor je schrijf
+├── mods/                ← per-mod mappen met AI-code (één map per mod)
 └── app/
     ├── Start.bat        ← Windows: installeer + start (Electron)
     ├── MaakBureaubladkoppeling.bat ← bureaublad-snelkoppeling met icoon

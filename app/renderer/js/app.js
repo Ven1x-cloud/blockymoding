@@ -305,21 +305,23 @@
 
   function aiFolderReminderCard(p) {
     const done = p.checklist.aiFolder;
-    const branch = (p.github && p.github.branch) || "main";
-    const cmd = `mkdir ai-code
-echo "# AI-code map" > ai-code/README.md
-git add ai-code
-git commit -m "ai-code map toegevoegd"
-git push -u origin ${branch}`;
+    const gh = p.github || {};
+    const branch = gh.branch || "main";
+    const steps = `1. Open github.com/Ven1x-cloud/blockymoding
+2. Kies bovenaan de branch "${branch}" (dezelfde als in de app)
+3. Klik Add file → Create new file
+4. Typ als naam:  mods/jouw-modnaam/README.md   (de mappen ontstaan vanzelf)
+5. Klik Commit changes
+Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor je.`;
     const card = el("div", { class: "reminder" + (done ? " done" : "") },
-      el("h4", { text: done ? "✅ AI-code map aangemaakt" : "⚠️ Herinnering: maak de AI-code map" }),
+      el("h4", { text: done ? "✅ AI-code map aangemaakt" : "⚠️ Herinnering: maak een map voor je mod op GitHub" }),
       done
-        ? el("p", { text: "De map ai-code/ bestaat (of je hebt dit afgevinkt). Vraag de AI om code en haal ze op via de AI-code/GitHub-tab." })
+        ? el("p", { text: "De map bestaat (of je hebt dit afgevinkt). Vul in de GitHub-tab dezelfde map in bij 'Map met AI-codes' en klik 'Codes ophalen'." })
         : el("div", {},
-          el("p", { text: "Maak in JOUW GitHub-branch een map waar ik (de AI) code in kan zetten voor je mod. Dit zijn de commando's:" }),
-          el("pre", { class: "codeblock", text: cmd }),
+          el("p", { text: "Elke mod krijgt een eigen map in deze GitHub-repo waar ik (de AI) code voor je in zet – één map per mod. Geen Git nodig, zo maak je 'm in de browser:" }),
+          el("pre", { class: "codeblock", text: steps }),
           el("div", { class: "row" },
-            el("button", { class: "mc-btn mc-btn-sm mc-btn-blue", text: "📋 Kopieer commando's", onclick: () => copyText(cmd) }),
+            el("button", { class: "mc-btn mc-btn-sm mc-btn-blue", text: "📋 Kopieer stappen", onclick: () => copyText(steps) }),
             el("button", { class: "mc-btn mc-btn-sm mc-btn-green", text: "✔ Ik heb het gedaan", onclick: () => { p.checklist.aiFolder = true; changed(); } }),
             el("button", { class: "mc-btn mc-btn-sm mc-btn-ghost", text: "Naar GitHub-tab →", onclick: () => goto("github") })
           )
@@ -336,7 +338,7 @@ git push -u origin ${branch}`;
 
   function showAiFolderReminder() {
     // direct na creatie: spring naar dashboard waar de kaart staat
-    toast("Belangrijk: maak de ai-code map in je branch (zie Overzicht)", "info");
+    toast("Belangrijk: maak een map voor je mod op GitHub (zie Overzicht)", "info");
   }
 
   // ══════════════════════════════════════════════
@@ -1410,10 +1412,10 @@ git push -u origin ${branch}`;
         field("Branch", textInput(gh.branch, (v) => { gh.branch = v.trim(); State.save(); }, { placeholder: "main" }))
       ),
       el("div", { class: "grid2" },
-        field("Map met AI-codes", textInput(gh.folder, (v) => { gh.folder = v.trim().replace(/^\/+|\/+$/g, ""); State.save(); }, { placeholder: "ai-code" })),
+        field("Map met AI-codes", textInput(gh.folder, (v) => { gh.folder = v.trim().replace(/^\/+|\/+$/g, ""); State.save(); }, { placeholder: "ai-code of mods/jouw-mod" })),
         field("Token (optioneel, privé-repos)", textInput(gh.token, (v) => { gh.token = v; State.save(); }, { type: "password", placeholder: "ghp_... (alleen lokaal bewaard)" }))
       ),
-      el("div", { class: "inline-info small", text: "💡 Public repo? Dan is geen token nodig. De token wordt alleen in deze app (lokale opslag) bewaard." })
+      el("div", { class: "inline-info small", text: "💡 Public repo? Dan is geen token nodig. Per mod een eigen map? Vul die in bij 'Map met AI-codes' (bv. mods/mijn-mod). Token alleen bij privé-repos – wordt lokaal bewaard." })
     ));
 
     // ── codes ophalen ──
@@ -1452,7 +1454,7 @@ git push -u origin ${branch}`;
           }), status.nextSibling);
         }
         if (!entries.length) {
-          browseBody.appendChild(el("div", { class: "inline-warn", text: "Lege map. Maak de ai-code map aan (zie hierboven) en push code naar GitHub." }));
+          browseBody.appendChild(el("div", { class: "inline-warn", text: "Lege map. Maak 'm op GitHub (Add file → Create new file) of vraag de AI – zie de herinnering hierboven." }));
           return;
         }
         let fileCount = 0;
@@ -1478,7 +1480,7 @@ git push -u origin ${branch}`;
                     try {
                       const content = await GitHubKit.fetchFile(cfg, e);
                       addAiFile(p, gh.folder ? `${pathNow ? pathNow + "/" : ""}${e.name}` : e.path, content);
-                      toast(`${e.name} toegevoegd aan ai-code ✔`, "ok");
+                      toast(`${e.name} toegevoegd aan je mod ✔`, "ok");
                       renderAiFiles();
                     } catch (err) { toast(String(err.message || err), "err"); }
                   }
@@ -1537,7 +1539,7 @@ git push -u origin ${branch}`;
     function renderAiFiles() {
       filesBody.innerHTML = "";
       if (!p.aiFiles.length) {
-        filesBody.appendChild(emptyState("🤖", "Nog geen codes ingevoegd. Gebruik de knoppen hierboven, of laat de AI code pushen naar je ai-code map."));
+        filesBody.appendChild(emptyState("🤖", "Nog geen codes ingevoegd. Gebruik de knoppen hierboven, of laat de AI code in je GitHub-map zetten."));
         return;
       }
       p.aiFiles.forEach((f, i) => {

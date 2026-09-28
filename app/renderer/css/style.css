@@ -738,3 +738,18 @@ pre.codeblock {
   margin: 7px 0;
   line-height: 1.45;
 }
+
+
+/* ── 3D-vorm editor (blokken) ── */
+.shape-editor { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-top: 8px; }
+.shape3d-stage { width: 200px; height: 170px; perspective: 520px; display: flex; align-items: center; justify-content: center; background: #12151c; border: 1px solid #2a3140; border-radius: 10px; cursor: grab; user-select: none; touch-action: none; flex: 0 0 auto; }
+.shape3d-stage:active { cursor: grabbing; }
+.shape3d-pivot { transform-style: preserve-3d; }
+.shape3d-cube { --w: 16px; --h: 16px; --d: 16px; position: relative; width: 0; height: 0; transform-style: preserve-3d; }
+.shape3d-face { position: absolute; left: 0; top: 0; image-rendering: pixelated; background-color: #7a7a7a; background-size: 100% 100%; border: 1px solid rgba(0, 0, 0, .45); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07); }
+.shape3d-front  { width: calc(var(--w) * 8px); height: calc(var(--h) * 8px); transform: translate(-50%, -50%) translateZ(calc(var(--d) * 4px)); }
+.shape3d-back   { width: calc(var(--w) * 8px); height: calc(var(--h) * 8px); transform: translate(-50%, -50%) rotateY(180deg) translateZ(calc(var(--d) * 4px)); }
+.shape3d-right  { width: calc(var(--d) * 8px); height: calc(var(--h) * 8px); transform: translate(-50%, -50%) rotateY(90deg) translateZ(calc(var(--w) * 4px)); }
+.shape3d-left   { width: calc(var(--d) * 8px); height: calc(var(--h) * 8px); transform: translate(-50%, -50%) rotateY(-90deg) translateZ(calc(var(--w) * 4px)); }
+.shape3d-top    { width: calc(var(--w) * 8px); height: calc(var(--d) * 8px); transform: translate(-50%, -50%) rotateX(90deg) translateZ(calc(var(--h) * 4px)); }
+.shape3d-bottom { width: calc(var(--w) * 8px); height: calc(var(--d) * 8px); transform: translate(-50%, -50%) rotateX(-90deg) translateZ(calc(var(--h) * 4px)); }

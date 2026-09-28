@@ -355,6 +355,8 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     const b = {
       id, name: "Mijn Blok " + n,
       hardness: 1.5, requiresTool: true, tool: "pickaxe", light: 0,
+      blast: 0, friction: 0.6, noCollision: false, mapColor: "", randomTicks: false,
+      shape: { w: 16, h: 16, d: 16 },
       genStyle: "ruis", genColor: "#8a8a8a",
       pixels: TextureKit.generate("ruis", "#8a8a8a", Math.floor(Math.random() * 99999))
     };
@@ -410,6 +412,80 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ));
       ed.appendChild(checkInput("Heeft gereedschap nodig om te breken", sel.requiresTool, (v) => { sel.requiresTool = v; State.save(); }));
 
+      // ── extra eigenschappen ──
+      ed.appendChild(el("div", { class: "grid3" },
+        field("Explosieweerstand", textInput(sel.blast ?? 0, (v) => { sel.blast = Math.max(0, parseFloat(v) || 0); State.save(); }, { type: "number", step: "0.5", min: "0" }), "0 = volgt de hardheid"),
+        field("Wrijving (0,2–1,0)", textInput(sel.friction ?? 0.6, (v) => { sel.friction = Math.max(0.2, Math.min(1, parseFloat(v) || 0.6)); State.save(); }, { type: "number", step: "0.05", min: "0.2", max: "1" }), "ijs ≈ 0,98 · smeer = 0,6"),
+        field("Kaartkleur", selectInput([["", "— standaard —"], ["stone", "Steen"], ["grass", "Gras"], ["wood", "Hout"], ["metal", "Metaal"], ["fire", "Vuur"], ["sand", "Zand"], ["ice", "Ijs"], ["plant", "Plant"], ["color_purple", "Paars"]], sel.mapColor || "", (v) => { sel.mapColor = v; State.save(); }))
+      ));
+      ed.appendChild(el("div", { class: "row", style: "flex-wrap:wrap" },
+        checkInput("Geen botsing (plant/dun object)", !!sel.noCollision, (v) => { sel.noCollision = v; State.save(); }),
+        checkInput("Willekeurige ticks (gewas-gedrag)", !!sel.randomTicks, (v) => { sel.randomTicks = v; State.save(); })
+      ));
+
+      // ── 3D-vorm (maatwerk-model) ──
+      ed.appendChild(el("div", { class: "sep" }));
+      ed.appendChild(el("h3", { class: "card-title", text: "🧊 3D-vorm (maatwerk-model)" }));
+      if (!sel.shape) sel.shape = { w: 16, h: 16, d: 16 };
+      const sh = sel.shape;
+      const shapeWrap = el("div", { class: "shape-editor" });
+      const stage = el("div", { class: "shape3d-stage" });
+      const cube = el("div", { class: "shape3d-cube" });
+      const faces = {};
+      ["front", "back", "right", "left", "top", "bottom"].forEach((f) => {
+        faces[f] = el("div", { class: "shape3d-face shape3d-" + f });
+        cube.appendChild(faces[f]);
+      });
+      const pivot = el("div", { class: "shape3d-pivot" }, cube);
+      stage.appendChild(pivot);
+      let rotY = -28, rotX = -22, drag = null;
+      const applyRot = () => { pivot.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`; };
+      const upd = () => {
+        cube.style.setProperty("--w", sh.w + "px");
+        cube.style.setProperty("--h", sh.h + "px");
+        cube.style.setProperty("--d", sh.d + "px");
+        try {
+          const url = TextureKit.pixelsToCanvas(sel.pixels || TextureKit.generate("ruis", "#888", 1), 16).toDataURL();
+          Object.keys(faces).forEach((k) => { faces[k].style.backgroundImage = "url(" + url + ")"; });
+        } catch (e) { /* geen canvas beschikbaar */ }
+      };
+      stage.addEventListener("pointerdown", (e) => {
+        drag = { x: e.clientX, y: e.clientY };
+        if (stage.setPointerCapture && e.pointerId != null) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* ok */ } }
+      });
+      stage.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        rotY += (e.clientX - drag.x) * 0.5;
+        rotX = Math.max(-80, Math.min(80, rotX - (e.clientY - drag.y) * 0.5));
+        drag = { x: e.clientX, y: e.clientY };
+        applyRot();
+      });
+      const endDrag = () => { drag = null; };
+      stage.addEventListener("pointerup", endDrag);
+      stage.addEventListener("pointercancel", endDrag);
+      const shapeSlider = (key, label, min, max) => field(label, textInput(sh[key], (v) => {
+        sh[key] = Math.max(min, Math.min(max, parseInt(v, 10) || max));
+        State.save(); upd();
+      }, { type: "number", min: String(min), max: String(max) }));
+      shapeWrap.appendChild(stage);
+      const shapeInfo = el("div", { style: "flex:1;min-width:220px" });
+      shapeInfo.appendChild(el("div", { class: "grid3" },
+        shapeSlider("w", "Breedte (1-16)", 1, 16),
+        shapeSlider("h", "Hoogte (1-16)", 1, 16),
+        shapeSlider("d", "Diepte (1-16)", 1, 16)
+      ));
+      shapeInfo.appendChild(el("div", { class: "row", style: "flex-wrap:wrap;margin-top:6px" },
+        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "⬛ Vol blok", onclick: () => { Object.assign(sh, { w: 16, h: 16, d: 16 }); State.save(); render(); } }),
+        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "▬ Halve steen", onclick: () => { Object.assign(sh, { w: 16, h: 8, d: 16 }); State.save(); render(); } }),
+        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "🪵 Pilaar", onclick: () => { Object.assign(sh, { w: 8, h: 16, d: 8 }); State.save(); render(); } }),
+        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "📄 Plaat", onclick: () => { Object.assign(sh, { w: 16, h: 2, d: 16 }); State.save(); render(); } })
+      ));
+      shapeInfo.appendChild(el("div", { class: "small dim mt", text: "Sleep over de preview om te draaien. Anders dan 16×16×16 → maatwerk model-JSON in de export. Botsing blijft voorlopig kubisch (vraag de AI voor vorm-botsing)." }));
+      shapeWrap.appendChild(shapeInfo);
+      ed.appendChild(shapeWrap);
+      const bootShape = () => { upd(); applyRot(); };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(bootShape); else bootShape();
+
       ed.appendChild(el("div", { class: "sep" }));
       ed.appendChild(el("h3", { class: "card-title", text: "Textuur (16×16)" }));
       const texHolder = el("div");
@@ -440,6 +516,63 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
   //  ITEMS
   // ══════════════════════════════════════════════
 
+  function renderEnchantsCard(root, p) {
+    if (!p.enchants) p.enchants = [];
+    const card = el("div", { class: "card mt" });
+    card.appendChild(el("h3", { class: "card-title", text: "✨ Aangepaste enchants (van je hele mod)" }));
+    card.appendChild(el("p", { class: "dim small", text: "Echte Minecraft-enchants: 26.3 → enchantment-JSON, 1.20.1 → Java-code. Gebruik in-game met /enchant @p <id> <niveau>." }));
+    const list = el("div");
+    const renderList = () => {
+      list.innerHTML = "";
+      if (!p.enchants.length) list.appendChild(el("div", { class: "small dim", text: "Nog geen enchants – klik op ➕ Nieuwe enchant." }));
+      p.enchants.forEach((e, i) => {
+        const effectFields = (e.effect === "status")
+          ? el("div", { class: "grid3" },
+              field("Status-effect", textInput(e.statusId || "minecraft:poison", (v) => { e.statusId = v.trim() || "minecraft:poison"; State.save(); }, { placeholder: "minecraft:poison" })),
+              field("Duur per niveau (sec)", textInput(e.statusDur ?? 3, (v) => { e.statusDur = Math.max(1, parseInt(v, 10) || 1); State.save(); }, { type: "number", min: "1" })),
+              field("Sterkte (amplifier)", textInput(e.statusAmp ?? 0, (v) => { e.statusAmp = Math.max(0, parseInt(v, 10) || 0); State.save(); }, { type: "number", min: "0" }))
+            )
+          : el("div", { class: "grid3" },
+              field("Basis-sterkte (niveau 1)", textInput(e.base ?? 1, (v) => { e.base = parseFloat(v) || 0; State.save(); }, { type: "number", step: "0.5" })),
+              field("Extra per niveau", textInput(e.perLevel ?? 0.5, (v) => { e.perLevel = parseFloat(v) || 0; State.save(); }, { type: "number", step: "0.5" })),
+              field("Formule", el("span", { class: "dim small", text: "basis + (nivo−1)×extra" }))
+            );
+        list.appendChild(el("div", { class: "card", style: "margin:8px 0;padding:10px" },
+          el("div", { class: "grid3" },
+            field("Naam", textInput(e.name, (v) => { e.name = v; State.save(); })),
+            field("ID", textInput(e.id, (v) => { e.id = sanitizeId(v); State.save(); })),
+            field("Max niveau", textInput(e.maxLevel || 3, (v) => { e.maxLevel = Math.max(1, Math.min(5, parseInt(v, 10) || 1)); State.save(); }, { type: "number", min: "1", max: "5" }))
+          ),
+          el("div", { class: "grid3" },
+            field("Effect", selectInput([["schade", "⚔ Extra schade"], ["status", "☣ Effect bij hit"], ["knockback", "🌊 Terugslag bij hit"]], e.effect || "schade", (v) => { e.effect = v; changed(); })),
+            field("Vindbaarheid", textInput(e.weight ?? 10, (v) => { e.weight = Math.max(1, Math.min(30, parseInt(v, 10) || 1)); State.save(); }, { type: "number", min: "1", max: "30" }), "hoog = vaker in tafel"),
+            field("Werkt op", selectInput([["hand", "Wapen (hand)"], ["mainhand", "Alleen rechterhand"], ["armor", "Pantser"], ["any", "Alles"]], e.slots || "hand", (v) => { e.slots = v; State.save(); }))
+          ),
+          effectFields,
+          el("div", { class: "row" },
+            el("button", { class: "mc-btn mc-btn-red mc-btn-xs", text: "🗑 Verwijder enchant", onclick: () => { p.enchants.splice(i, 1); State.save(); renderList(); } })
+          )
+        ));
+      });
+    };
+    renderList();
+    card.appendChild(list);
+    card.appendChild(el("div", { class: "row mt" },
+      el("button", {
+        class: "mc-btn mc-btn-green mc-btn-sm", text: "➕ Nieuwe enchant",
+        onclick: () => {
+          let n = p.enchants.length + 1;
+          let id = "mijn_enchant_" + n;
+          while (p.enchants.some((x) => x.id === id)) { n++; id = "mijn_enchant_" + n; }
+          p.enchants.push({ id, name: "Mijn Enchant " + n, maxLevel: 3, weight: 10, slots: "hand", effect: "schade", base: 1, perLevel: 0.5, statusId: "minecraft:poison", statusDur: 3, statusAmp: 0 });
+          State.save(); renderList();
+        }
+      })
+    ));
+    root.appendChild(card);
+  }
+
+
   function addItem() {
     const p = cur();
     if (!p) return showCreateProject();
@@ -449,6 +582,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     while (ids.has(id)) { n++; id = "mijn_item_" + n; }
     const it = {
       id, name: "Mijn Item " + n, maxStack: 64,
+      rarity: "", maxDamage: 0, fireproof: false, glint: false, enchantability: 0,
       genStyle: "ruis", genColor: "#b87333",
       pixels: TextureKit.generate("ruis", "#b87333", Math.floor(Math.random() * 99999))
     };
@@ -461,6 +595,8 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
   function renderItems(root) {
     const p = cur();
     sectionTitle("Items", "Wapens, materialen, eten – alles wat je in je hand kunt houden.").forEach((n) => root.appendChild(n));
+
+    renderEnchantsCard(root, p);
 
     const sel = p.items.find((b) => b.id === State.ui.sel.items) || p.items[0];
     if (sel) State.ui.sel.items = sel.id;
@@ -493,6 +629,19 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ed.appendChild(field("Max. stapelgrootte", textInput(sel.maxStack, (v) => {
         sel.maxStack = Math.max(1, Math.min(64, parseInt(v, 10) || 64)); State.save();
       }, { type: "number", min: "1", max: "64" })));
+
+      ed.appendChild(el("div", { class: "sep" }));
+      ed.appendChild(el("h3", { class: "card-title", text: "⚡ Item-boost" }));
+      ed.appendChild(el("div", { class: "grid3" },
+        field("Zeldzaamheid", selectInput([["", "— gewoon (wit) —"], ["uncommon", "Ongebruikelijk (geel)"], ["rare", "Zeldzaam (cyaan)"], ["epic", "Episch (paars)"]], sel.rarity || "", (v) => { sel.rarity = v; State.save(); })),
+        field("Duurzaamheid (0 = niet)", textInput(sel.maxDamage ?? 0, (v) => { sel.maxDamage = Math.max(0, parseInt(v, 10) || 0); State.save(); }, { type: "number", min: "0" }), "slijtage-punten"),
+        field("Beheksbaarheid (0-15)", textInput(sel.enchantability ?? 0, (v) => { sel.enchantability = Math.max(0, Math.min(15, parseInt(v, 10) || 0)); State.save(); }, { type: "number", min: "0", max: "15" }), "hoe beter te verenkelen")
+      ));
+      ed.appendChild(el("div", { class: "row", style: "flex-wrap:wrap" },
+        checkInput("Brandwerend (overleeft vuur & lava)", !!sel.fireproof, (v) => { sel.fireproof = v; State.save(); }),
+        checkInput("Enchant-glinstering ✨", !!sel.glint, (v) => { sel.glint = v; State.save(); })
+      ));
+      if ((sel.maxDamage | 0) > 0) ed.appendChild(el("div", { class: "small dim", text: "⚠ Duurzaamheid actief → Minecraft zet de stapelgrootte automatisch op 1." }));
 
       ed.appendChild(el("div", { class: "sep" }));
       ed.appendChild(el("h3", { class: "card-title", text: "Textuur (16×16)" }));
@@ -1093,7 +1242,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     let id = "mijn_mob_" + n;
     while (ids.has(id)) { n++; id = "mijn_mob_" + n; }
     const m = {
-      id, name: "Mijn Mob " + n, kind: "passive",
+      id, name: "Mijn Mob " + n, kind: "passive", behavior: "", triggers: [],
       health: 20, speed: 0.25, damage: 3, width: 0.9, height: 1.4,
       colors: { primary: "#e8b866", secondary: "#d0c0a0" },
       guiId: null, drops: []
@@ -1147,6 +1296,37 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ed.appendChild(el("div", { class: "grid2" },
         field("Breedte", textInput(sel.width, (v) => { sel.width = parseFloat(v) || 0.9; State.save(); }, { type: "number", step: "0.1" })),
         field("Hoogte", textInput(sel.height, (v) => { sel.height = parseFloat(v) || 1.4; State.save(); }, { type: "number", step: "0.1" }))
+      ));
+
+      // ── gedrag & animatie-triggers ──
+      ed.appendChild(el("div", { class: "sep" }));
+      ed.appendChild(el("h3", { class: "card-title", text: "🎬 Gedrag & animatie-triggers" }));
+      if (!sel.triggers) sel.triggers = [];
+      ed.appendChild(el("div", { class: "grid2" },
+        field("Gedrag-preset", selectInput([
+          ["", "— standaard (varken) —"],
+          ["dwaalt", "🚶 Dwaalt rustig rond"],
+          ["jager", "🗡 Jager (valt spelers aan)"],
+          ["vlucht", "🏃 Vlucht bij gevaar"],
+          ["springer", "🦘 Springerig & aanvallend"]
+        ], sel.behavior || "", (v) => { sel.behavior = v; changed(); }),
+          "Genereert extra AI-doelen in de Java-code (mojmap én yarn)."),
+        field("Zelf coderen?", el("span", { class: "dim small", text: "De export bevat kant-en-klare trigger-haksels in de entity-klasse + een prompt-bestand in ai-code/animaties/ – plak het in de chat en de AI schrijft je animatie." }))
+      ));
+      const trigToggle = (tid) => (v) => {
+        if (v && !sel.triggers.includes(tid)) sel.triggers.push(tid);
+        if (!v) sel.triggers = sel.triggers.filter((x) => x !== tid);
+        State.save();
+      };
+      ed.appendChild(el("div", { class: "mt" },
+        el("strong", { text: "Wanneer moet er iets gebeuren?" }),
+        el("div", { class: "row", style: "flex-wrap:wrap;margin-top:4px" },
+          checkInput("🌀 Bij spawn", sel.triggers.includes("spawn"), trigToggle("spawn")),
+          checkInput("⚔ Bij aanval", sel.triggers.includes("attack"), trigToggle("attack")),
+          checkInput("🖱 Bij rechtsklik", sel.triggers.includes("click"), trigToggle("click")),
+          checkInput("⏱ Elke 5 sec", sel.triggers.includes("timer"), trigToggle("timer")),
+          checkInput("💔 Bij laag leven", sel.triggers.includes("lowhp"), trigToggle("lowhp"))
+        )
       ));
 
       // spawn-ei kleuren

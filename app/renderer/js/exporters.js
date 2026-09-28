@@ -33,6 +33,321 @@ const Exporters = (() => {
   }
   function lootDir(p) { return usesNewDirs(p) ? "loot_table" : "loot_tables"; }
   function recipesDir(p) { return usesNewDirs(p) ? "recipe" : "recipes"; }
+
+  /** 1.20.5+/26.x: data-componenten beschikbaar (glint, enchantable). */
+  function hasComponents(p) {
+    if (isMojmap(p)) return true;
+    const parts = (p.meta.mcVersion || "1.20.1").split(".");
+    const minor = parseInt(parts[1], 10) || 0;
+    if (minor > 21) return true;
+    if (minor === 21) return true;
+    if (minor === 20) return (parseInt(parts[2], 10) || 0) >= 5;
+    return false;
+  }
+
+  /** Item-properties keten voor officiële Mojang-mappings (26.x). */
+  function itemPropsM(it) {
+    const bits = [];
+    const dmg = it.maxDamage | 0;
+    if (dmg > 0) bits.push(`maxDamage(${dmg})`);
+    else if ((it.maxStack || 64) !== 1) bits.push(`stacksTo(${it.maxStack || 64})`);
+    if (it.rarity) bits.push(`rarity(net.minecraft.world.item.Rarity.${String(it.rarity).toUpperCase()})`);
+    if (it.fireproof) bits.push("fireResistant()");
+    if (it.glint) bits.push("component(net.minecraft.core.component.DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)");
+    if ((it.enchantability | 0) > 0) bits.push(`enchantable(${it.enchantability | 0})`);
+    return bits.length ? "." + bits.join(".") : "";
+  }
+
+  const BEHAVIOR_LABELS = { dwaalt: "dwaalt rustig rond", jager: "jager – valt spelers aan", vlucht: "vlucht bij gevaar", springer: "springerig & aanvallend" };
+
+  /** Extra AI-doelen voor de gedrag-preset (FQN → werkt in beide mappings). */
+  function behaviorGoals(m, flavor) {
+    if (!m.behavior) return "";
+    const goal = flavor === "mojmap" ? "net.minecraft.world.entity.ai.goal" : "net.minecraft.entity.ai.goal";
+    const tgt = flavor === "mojmap" ? "net.minecraft.world.entity.ai.goal.target" : "net.minecraft.entity.ai.goal.target";
+    const player = flavor === "mojmap" ? "net.minecraft.world.entity.player.Player" : "net.minecraft.entity.player.PlayerEntity";
+    const L = [`        // 🎬 BlockyMod gedrag: ${BEHAVIOR_LABELS[m.behavior] || m.behavior}`];
+    if (m.behavior === "dwaalt") {
+      L.push(`        this.goalSelector.addGoal(3, new ${goal}.RandomStrollGoal(this, 1.0));`);
+      L.push(`        this.goalSelector.addGoal(4, new ${goal}.LookAtPlayerGoal(this, ${player}.class, 6.0F));`);
+    }
+    if (m.behavior === "jager") {
+      L.push(`        this.goalSelector.addGoal(1, new ${goal}.MeleeAttackGoal(this, 1.2, true));`);
+      L.push(`        this.targetSelector.addGoal(2, new ${tgt}.NearestAttackableTargetGoal<>(this, ${player}.class, true));`);
+    }
+    if (m.behavior === "vlucht") {
+      L.push(`        this.goalSelector.addGoal(0, new ${goal}.PanicGoal(this, 1.4));`);
+    }
+    if (m.behavior === "springer") {
+      L.push(`        this.goalSelector.addGoal(1, new ${goal}.LeapAtTargetGoal(this, 0.4F));`);
+      L.push(`        this.goalSelector.addGoal(2, new ${goal}.MeleeAttackGoal(this, 1.1, true));`);
+      L.push(`        this.targetSelector.addGoal(3, new ${tgt}.NearestAttackableTargetGoal<>(this, ${player}.class, true));`);
+    }
+    return L.join("\n");
+  }
+
+  /** Animatie-trigger-haksels + aiStep/tickMovement-hook in de entity-klasse. */
+  function triggersBlock(m, flavor) {
+    const ids = m.triggers || [];
+    if (!ids.length) return "";
+    const moj = flavor === "mojmap";
+    const tick = moj ? "this.tickCount" : "this.age";
+    const ambient = moj ? "net.minecraft.sounds.SoundEvents.ENTITY_PIG_AMBIENT" : "net.minecraft.sound.SoundEvents.ENTITY_PIG_AMBIENT";
+    const L = [];
+    if (ids.includes("spawn")) {
+      L.push(`        if (${tick} == 1) {
+            // 🌀 SPAWN: start-effect (voorbeeld: geluidje) – vervang door jouw animatie!
+            this.playSound(${ambient}, 1.0F, 1.3F);
+        }`);
+    }
+    if (ids.includes("attack")) {
+      L.push(`        if (this.getTarget() != null) {
+            // ⚔ AANVAL: voeg hier partikels/beweging toe zodra de AI-code er is
+        }`);
+    }
+    if (ids.includes("click")) {
+      L.push(`        // 🖱 RECHTSKLIJK: visuele reactie op de interact-methode (zie interactMob)
+        if (${tick} % 20 == 0) { /* voorbeeld-tick; wacht op AI-animatie */ }`);
+    }
+    if (ids.includes("timer")) {
+      L.push(`        if (${tick} % 100 == 0) {
+            // ⏱ ELKE 5 SECONDEN: periodiek animatie-effect
+        }`);
+    }
+    if (ids.includes("lowhp")) {
+      L.push(`        if (this.getHealth() < this.getMaxHealth() * 0.3F) {
+            // 💔 LAAG LEVEN: alarm-effect / animatie
+        }`);
+    }
+    const hook = moj
+      ? `    @Override
+    public void aiStep() {
+        super.aiStep();
+        this.blockyModTriggers();
+    }`
+      : `    @Override
+    protected void tickMovement() {
+        super.tickMovement();
+        this.blockyModTriggers();
+    }`;
+    return `    // 🎬 BlockyMod animatie-triggers – koppel hier je animaties (of laat de AI het coderen!)
+    private int bmTriggerTimer = 0;
+
+    private void blockyModTriggers() {
+        bmTriggerTimer++;
+${L.join("\n")}
+    }
+
+${hook}
+`;
+  }
+
+  /** Blokmodel: standaard-kubus óf maatwerk element (3D-vorm uit de editor). */
+  function blockModel(ns, b) {
+    const tex = `${ns}:block/${b.id}`;
+    const sh = b.shape || { w: 16, h: 16, d: 16 };
+    const num = (v) => Math.max(1, Math.min(16, parseFloat(v) || 16));
+    const w = num(sh.w), h = num(sh.h), d = num(sh.d);
+    if (w >= 16 && h >= 16 && d >= 16) {
+      return { parent: "minecraft:block/cube_all", textures: { all: tex } };
+    }
+    const r = (n) => Math.round(n * 100) / 100;
+    const x0 = r((16 - w) / 2);
+    const z0 = r((16 - d) / 2);
+    const face = { uv: [0, 0, 16, 16], texture: "#0" };
+    return {
+      textures: { "0": tex, particle: tex },
+      elements: [{
+        from: [x0, 0, z0],
+        to: [r(x0 + w), r(h), r(z0 + d)],
+        faces: {
+          down: { ...face }, up: { ...face },
+          north: { ...face }, south: { ...face },
+          west: { ...face }, east: { ...face }
+        }
+      }]
+    };
+  }
+
+  /** Enchantment-JSON (26.x data-driven registry). */
+  function enchantJson(p, e) {
+    const ns = p.meta.modId;
+    const base = typeof e.base === "number" ? e.base : 1;
+    const per = typeof e.perLevel === "number" ? e.perLevel : 0.5;
+    const maxLvl = Math.max(1, e.maxLevel || 3);
+    let effects;
+    if (e.effect === "status") {
+      const dur = Math.max(1, e.statusDur || 3);
+      effects = {
+        "minecraft:post_attack": [{
+          enchanted: "attacker",
+          affected: "victim",
+          effect: {
+            type: "minecraft:apply_mob_effect",
+            to_apply: e.statusId || "minecraft:poison",
+            min_amplifier: e.statusAmp || 0,
+            max_amplifier: e.statusAmp || 0,
+            min_duration: { type: "minecraft:linear", base: dur, per_level_above_first: 0 },
+            max_duration: { type: "minecraft:linear", base: dur, per_level_above_first: 0 }
+          }
+        }]
+      };
+    } else if (e.effect === "knockback") {
+      effects = {
+        "minecraft:knockback": [{
+          effect: { type: "minecraft:linear", base: base, per_level_above_first: per }
+        }]
+      };
+    } else {
+      effects = {
+        "minecraft:damage": [{
+          effect: { type: "minecraft:add", value: { type: "minecraft:linear", base: base, per_level_above_first: per } }
+        }]
+      };
+    }
+    const supported = (e.slots === "armor")
+      ? "#minecraft:enchantable/armor"
+      : (e.slots === "any")
+        ? ["#minecraft:enchantable/weapon", "#minecraft:enchantable/armor"]
+        : (e.slots === "mainhand")
+          ? "#minecraft:enchantable/sword"
+          : "#minecraft:enchantable/weapon";
+    return {
+      description: { translate: `enchantment.${ns}.${e.id}` },
+      weight: Math.max(1, e.weight || 10),
+      max_level: maxLvl,
+      min_cost: { base: 5, per_level_above_first: 8 },
+      max_cost: { base: 20, per_level_above_first: 8 },
+      anvil_cost: 2,
+      slots: [e.slots || "hand"],
+      supported_items: supported,
+      effects
+    };
+  }
+
+  /** Java-klasse met enchantment-registratie voor yarn (1.20.1). */
+  function modEnchantmentsY(p) {
+    const ns = p.meta.modId;
+    const fields = (p.enchants || []).map((e) => {
+      const cn = constname(e.id);
+      const cat = e.slots === "armor" ? "EnchantmentCategory.ARMOR"
+        : e.slots === "any" ? "EnchantmentCategory.ALL"
+        : "EnchantmentCategory.WEAPON";
+      const slots = e.slots === "armor"
+        ? "EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET"
+        : "EquipmentSlot.MAINHAND";
+      const maxLvl = Math.max(1, e.maxLevel || 3);
+      const base = typeof e.base === "number" ? e.base : 1;
+      const per = typeof e.perLevel === "number" ? e.perLevel : 0.5;
+      const rar = e.rarity === "epic" ? "EPIC" : e.rarity === "rare" ? "RARE" : e.rarity === "common" ? "COMMON" : "UNCOMMON";
+      let effect = "";
+      if (e.effect === "status") {
+        const constmap = { poison: "POISON", wither: "WITHER", slowness: "SLOWNESS", weakness: "WEAKNESS", glowing: "GLOWING", hunger: "HUNGER", blindness: "BLINDNESS", levitation: "LEVITATION" };
+        const sid = String(e.statusId || "minecraft:poison").split(":")[1] || "poison";
+        const sconst = constmap[sid] || "POISON";
+        const dur = Math.max(1, e.statusDur || 3) * 20;
+        const amp = e.statusAmp || 0;
+        effect = `
+        @Override
+        public void doPostAttack(LivingEntity attacker, Entity target, int level) {
+            super.doPostAttack(attacker, target, level);
+            if (target instanceof LivingEntity living) {
+                living.addStatusEffect(new StatusEffectInstance(StatusEffectInstances.${sconst}, ${dur}, ${amp}));
+            }
+        }`;
+      } else if (e.effect === "knockback") {
+        effect = `
+        @Override
+        public void doPostAttack(LivingEntity attacker, Entity target, int level) {
+            super.doPostAttack(attacker, target, level);
+            target.knockback(${base.toFixed(2)}D * level, attacker.getX() - target.getX(), attacker.getZ() - target.getZ());
+        }`;
+      } else {
+        effect = `
+        @Override
+        public float getAttackDamage(int level, EntityType<?> type) {
+            return ${base.toFixed(1)}F + (level - 1) * ${per.toFixed(1)}F;
+        }`;
+      }
+      return `    public static final Enchantment ${cn} = Registry.register(Registry.ENCHANTMENT,
+            new Identifier("${ns}", "${e.id}"),
+            new Enchantment(Enchantment.Rarity.${rar}, ${cat}, ${slots}) {
+        @Override
+        public int getMaxLevel() {
+            return ${maxLvl};
+        }
+
+        @Override
+        public int getMinCost(int level) {
+            return 5 + (level - 1) * 8;
+        }
+
+        @Override
+        public int getMaxCost(int level) {
+            return 20 + (level - 1) * 8;
+        }
+
+        @Override
+        public int getWeight() {
+            return ${Math.max(1, e.weight || 10)};
+        }
+${effect}
+    });`;
+    }).join("\n\n");
+    return `package ${javaPackage(p)};
+
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.enchantment.EnchantmentCategory;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffectInstances;
+import net.minecraft.registry.Registry;
+import net.minecraft.util.Identifier;
+
+/**
+ * Aangepaste enchants – gegenereerd door BlockyMod Studio.
+ * Gebruik in-game: /enchant @p <modid>:<id> <niveau>
+ */
+public final class ModEnchantments {
+    private ModEnchantments() {}
+
+${fields}
+
+    public static void register() {
+        // registratie gebeurt via statische initialisatie (zie velden)
+    }
+}
+`;
+  }
+
+  /** Prompt-bestand in ai-code/ voor de AI: animaties coderen. */
+  function animPromptMd(p, m) {
+    const map = { spawn: "bij spawn", attack: "bij een aanval", click: "bij rechtsklik", timer: "elke 5 seconden", lowhp: "bij laag leven (<30%)" };
+    const chosen = (m.triggers || []).map((t) => map[t] || t);
+    return `# 🎬 Animatie-prompts – ${m.name || m.id}
+
+Triggers uit de app: ${chosen.length ? chosen.join(", ") : (m.behavior ? "gedrag: " + (BEHAVIOR_LABELS[m.behavior] || m.behavior) : "geen")}.
+
+## Zo werkt het
+1. Vraag de AI: *"Schrijf de animatie voor \`${m.id}\` die ${chosen[0] || "bij spawn"} partikels en geluid geeft"*
+2. De AI zet de code in deze map (pad relatief aan deze map).
+3. In de app: 🤖 AI-code / GitHub → **Codes ophalen** → opnieuw exporten.
+
+## Waar de hooks staan
+- Entity-klasse: \`src/main/java/.../entity/${classname(m.id)}Entity.java\`
+- Methode: \`blockyModTriggers()\` met de aangevinkte triggers
+- Voorbeelden die je aan de AI kunt vragen:
+  - partikels: \`this.level().addParticle(ParticleTypes.CLOUD, getX(), getY(), getZ(), 0, 0.1, 0);\`
+  - geluid: \`this.playSound(SoundEvents.ENTITY_PIG_AMBIENT, 1.0F, 1.0F);\`
+  - beweging in \`aiStep()\` (26.3) of \`tickMovement()\` (1.20.1)
+
+> Klaar? Zet de bestanden in je GitHub-map en druk in de app op **Codes ophalen**. 🚀
+`;
+  }
+
   function idExpr(p, pathLit) {
     // pathLit = bv. `"mijn_blok"`
     return is121(p)
@@ -105,10 +420,7 @@ const Exporters = (() => {
       put(`src/main/resources/assets/${ns}/blockstates/${b.id}.json`, json({
         variants: { "": { model: `${ns}:block/${b.id}` } }
       }));
-      put(`src/main/resources/assets/${ns}/models/block/${b.id}.json`, json({
-        parent: "minecraft:block/cube_all",
-        textures: { all: `${ns}:block/${b.id}` }
-      }));
+      put(`src/main/resources/assets/${ns}/models/block/${b.id}.json`, json(blockModel(ns, b)));
       put(`src/main/resources/assets/${ns}/models/item/${b.id}.json`, json({
         parent: `${ns}:block/${b.id}`
       }));
@@ -128,6 +440,17 @@ const Exporters = (() => {
         parent: "minecraft:item/generated",
         textures: { layer0: `${ns}:item/${it.id}` }
       }));
+    }
+
+    // ── Aangepaste enchants ──
+    const enchants = p.enchants || [];
+    for (const e of enchants) {
+      if (isMojmap(p)) {
+        put(`src/main/resources/data/${ns}/enchantment/${e.id}.json`, json(enchantJson(p, e)));
+      } else {
+        put(`src/main/java/${pkgDir(p)}/ModEnchantments.java`, modEnchantmentsY(p));
+        break; // één gedeelde registratie-klasse
+      }
     }
 
     // ── Recepten ──
@@ -169,6 +492,9 @@ const Exporters = (() => {
     // ── Mobs ──
     for (const m of p.mobs) {
       put(`src/main/java/${pkgDir(p)}/entity/${classname(m.id)}Entity.java`, entityClass(p, m));
+      if ((m.triggers && m.triggers.length) || m.behavior) {
+        put(`ai-code/animaties/${m.id}.md`, animPromptMd(p, m));
+      }
     }
 
     // ── Taalbestanden ──
@@ -370,7 +696,7 @@ public class ModMain implements ModInitializer {
         ModBlocks.register();
         ModItems.register();
         ModEntities.register();
-${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${story}
+${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${(p.enchants && p.enchants.length) ? "        ModEnchantments.register();\n" : ""}${story}
         LOGGER.info("[{}] geïnitialiseerd – veel bouwplezier!", MOD_ID);
     }
 }
@@ -393,6 +719,11 @@ ${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${story}
       ];
       if (b.requiresTool) lines.push(`            .requiresTool()`);
       if (b.light > 0) lines.push(`            .lightLevel(state -> ${b.light})`);
+      if ((b.blast || 0) > 0) lines.push(`            .explosionResistance(${Number(b.blast).toFixed(1)}F)`);
+      if (b.friction && Math.abs(b.friction - 0.6) > 0.001) lines.push(`            .slipperiness(${Number(b.friction).toFixed(2)}F)`);
+      if (b.noCollision) lines.push(`            .noCollision()`);
+      if (b.mapColor) lines.push(`            .mapColor(net.minecraft.block.MapColor.${String(b.mapColor).toUpperCase()})`);
+      if (b.randomTicks) lines.push(`            .randomTicks()`);
       lines.push(`            .sounds(BlockSoundGroup.${soundGroup(b)}));`);
       fields += lines.join("\n") + "\n";
       regs += `        Registry.register(Registries.BLOCK, ModMain.id("${b.id}"), ${c});\n`;
@@ -447,9 +778,13 @@ ${regs || "        // niets te registreren"}
     for (const it of p.items) {
       const c = byId.get(it.id);
       const settings = itemSettings(p);
-      const s = settings === "new Item.Settings()"
-        ? `new Item.Settings().maxCount(${it.maxStack || 64})`
-        : `new FabricItemSettings().maxCount(${it.maxStack || 64})`;
+      const bits = [];
+      const dmg = it.maxDamage | 0;
+      if (dmg > 0) bits.push(`maxDamage(${dmg})`);
+      else bits.push(`maxCount(${it.maxStack || 64})`);
+      if (it.rarity) bits.push(`rarity(net.minecraft.util.Rarity.${String(it.rarity).toUpperCase()})`);
+      if (it.fireproof) bits.push("fireproof()");
+      const s = settings + "." + bits.join(".");
       fields += `    public static final Item ${c} = new Item(${s});\n`;
       regs += `        Registry.register(Registries.ITEM, ModMain.id("${it.id}"), ${c});\n`;
     }
@@ -539,6 +874,8 @@ ${regs}
 
   function entityClass(p, m) {
     if (isMojmap(p)) return entityClassM(p, m);
+    const goalsY = behaviorGoals(m, "yarn");
+    const trigY = triggersBlock(m, "yarn");
     const cn = classname(m.id);
     const gui = m.guiId ? getGuiP(p, m.guiId) : null;
     const guiHandler = gui ? classname(gui.id) + "ScreenHandler" : null;
@@ -606,8 +943,8 @@ public class ${cn}Entity extends PigEntity {
 
     public ${cn}Entity(EntityType<? extends PigEntity> entityType, World world) {
         super(entityType, world);
-    }
-
+${goalsY ? goalsY + "\n" : ""}    }
+${trigY}
     /** Basis-attributen (leven, snelheid, aanval). */
     public static DefaultAttributeContainer.Builder createAttributes() {
         return PigEntity.createAttributes()
@@ -1034,6 +1371,10 @@ ${renderRegs || "        // geen mobs om te registreren"}
     for (const g of p.guis) {
       en[`gui.${ns}.${g.id}`] = g.name || g.id;
       nl[`gui.${ns}.${g.id}`] = g.name || g.id;
+    }
+    for (const e of (p.enchants || [])) {
+      en[`enchantment.${ns}.${e.id}`] = e.name || e.id;
+      nl[`enchantment.${ns}.${e.id}`] = e.name || e.id;
     }
     return { en, nl };
   }
@@ -1517,6 +1858,11 @@ ${gui}${creative}${story}
       ];
       if (b.requiresTool) lines.push(`                    .requiresCorrectToolForDrops()`);
       if (b.light > 0) lines.push(`                    .lightLevel(state -> ${b.light})`);
+      if ((b.blast || 0) > 0) lines.push(`                    .explosionResistance(${Number(b.blast).toFixed(1)}F)`);
+      if (b.friction && Math.abs(b.friction - 0.6) > 0.001) lines.push(`                    .friction(${Number(b.friction).toFixed(2)}F)`);
+      if (b.noCollision) lines.push(`                    .noCollission()`);
+      if (b.mapColor) lines.push(`                    .mapColor(net.minecraft.world.level.material.MapColor.${String(b.mapColor).toUpperCase()})`);
+      if (b.randomTicks) lines.push(`                    .randomTicks()`);
       lines.push(`                    .sound(SoundType.${sound}));`);
       return lines.join("\n");
     }).join("\n\n");
@@ -1563,7 +1909,7 @@ ${p.blocks.length ? (regs || "        // geladen via statische velden") : "     
       `    public static final BlockItem ${constname(b.id)} = registerBlockItem("${b.id}", ModBlocks.${constname(b.id)});`
     ).join("\n");
     const plainItems = p.items.map((it) =>
-      `    public static final Item ${constname(it.id)} = registerItem("${it.id}", props -> new Item(props.stacksTo(${it.maxStack || 64})));`
+      `    public static final Item ${constname(it.id)} = registerItem("${it.id}", props -> new Item(props${itemPropsM(it)}));`
     ).join("\n");
     const eggs = p.mobs.map((m) =>
       `    public static final Item ${constname(m.id)}_SPAWN_EGG = registerItem("${m.id}_spawn_egg",
@@ -1661,6 +2007,8 @@ ${p.mobs.length ? attrs : "        // niets te registreren"}
   }
 
   function entityClassM(p, m) {
+    const goalsM = behaviorGoals(m, "mojmap");
+    const trigM = triggersBlock(m, "mojmap");
     const cn = classname(m.id);
     const gui = m.guiId ? getGuiP(p, m.guiId) : null;
     const guiMenu = gui ? classname(gui.id) + "Menu" : null;
@@ -1718,8 +2066,8 @@ public class ${cn}Entity extends Pig {
 
     public ${cn}Entity(EntityType<? extends Pig> entityType, Level level) {
         super(entityType, level);
-    }
-
+${goalsM ? goalsM + "\n" : ""}    }
+${trigM}
     /** Basis-attributen (leven, snelheid, aanval). */
     public static AttributeSupplier.Builder createAttributes() {
         return Pig.createAttributes()

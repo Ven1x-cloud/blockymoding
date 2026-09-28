@@ -83,6 +83,23 @@ officiële Mojang-mappings, Java 25). Optioneel ook **1.20.1 / 1.21.1** (Yarn, J
 > iets anders heet: **plak de compilefout in de chat** en dan fix ik hem in
 > `ai-code/` – daarna haal je de fix met één knop op.
 
+## 🧊 Nieuw: 3D-vorm, item-boost, enchants & animatie-triggers
+
+- **3D-vorm-editor** (tab *Blokken*): sliders voor breedte/hoogte/diepte + een
+  sleep-preview in 3D; presets (vol blok, halve steen, pilaar, plaat). Exporteert
+  maatwerk model-JSON zodra de vorm afwijkt van 16³.
+- **Blok-boost**: explosieweerstand, wrijving, geen-botsing, kaartkleur en
+  willekeurige ticks naast hardheid/licht/gereedschap.
+- **Item-boost**: zeldzaamheid, duurzaamheid, brandwerend, enchant-glinstering
+  en beheksbaarheid.
+- **Aangepaste enchants** (tab *Items*, kaart onderaan): schade, effect-bij-hit
+  of terugslag → Minecraft 26.3 krijgt een data-driven enchantment-JSON,
+  1.20.1 krijgt Java-registercode. Gebruik in-game: `/enchant @p <modid>:<id> <niveau>`.
+- **Gedrag & animatie-triggers** (tab *Mobs*): presets (dwaalt, jager, vlucht,
+  springer) plus triggers (spawn, aanval, rechtsklik, timer, laag leven). De
+  export bevat kant-en-klare hook-code in de entity-klasse én een
+  prompt-bestand `ai-code/animaties/<mob>.md` dat je zo aan de AI geeft.
+
 ## 📤 Alles naar GitHub (knop)
 
 Knop **📤 Alles pushen naar GitHub** (tab 🤖 AI-code / GitHub) zet in **één

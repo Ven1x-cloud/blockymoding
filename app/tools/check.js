@@ -294,6 +294,104 @@ const mZip = Zip.build(Object.entries(m).map(([k, v]) => ({ path: "latest_mod/" 
 ok(mZip.length > 3000, `26.3-ZIP: ${mZip.length} bytes`);
 State.removeProject(p3.meta.modId);
 
+console.log("\n[10] Boost-rondje: item-boost, blok-boost, 3D-vorm, enchants, gedrag/animatie");
+const p4 = State.createProject("Boost Mod", "Tester3"); // mcVersion = 26.3
+p4.items.push({
+  id: "zwaardje", name: "Zwaardje", maxStack: 1, rarity: "epic", maxDamage: 250,
+  fireproof: true, glint: true, enchantability: 12,
+  pixels: TextureKit.generate("ruis", "#b87333", 3)
+});
+p4.blocks.push({
+  id: "glitch_blok", name: "Glitch Blok", hardness: 4, requiresTool: true, tool: "pickaxe", light: 7,
+  blast: 12, friction: 0.9, noCollision: true, mapColor: "color_purple", randomTicks: true,
+  shape: { w: 8, h: 12, d: 8 },
+  pixels: TextureKit.generate("steen", "#7d7d7d", 5)
+});
+p4.enchants.push(
+  { id: "thermal", name: "Thermisch", maxLevel: 3, weight: 8, slots: "hand", effect: "schade", base: 1, perLevel: 0.5 },
+  { id: "vergiftig", name: "Vergiftig", maxLevel: 2, weight: 5, slots: "mainhand", effect: "status", statusId: "minecraft:poison", statusDur: 3, statusAmp: 0 },
+  { id: "hamerstoot", name: "Hamerstoot", maxLevel: 2, weight: 10, slots: "hand", effect: "knockback", base: 0.5, perLevel: 0.2 }
+);
+p4.mobs.push({
+  id: "jager_mob", name: "Jager Mob", kind: "hostile", behavior: "jager",
+  triggers: ["spawn", "attack", "timer"], health: 20, speed: 0.3, damage: 4,
+  width: 0.9, height: 1.4, colors: { primary: "#aa3333", secondary: "#331111" }, guiId: null, drops: []
+});
+
+const b10 = Exporters.buildTextFiles(p4);
+
+// ── 26.3 (mojmap) ──
+const bi10 = b10["src/main/java/com/tester3/boost_mod/ModItems.java"];
+ok(bi10.includes("rarity(net.minecraft.world.item.Rarity.EPIC)"), "boost: rarity(EPIC) met FQN");
+ok(bi10.includes("maxDamage(250)"), "boost: duurzaamheid");
+ok(bi10.includes("fireResistant()"), "boost: brandwerend (officiële naam)");
+ok(bi10.includes("ENCHANTMENT_GLINT_OVERRIDE"), "boost: enchant-glinstering");
+ok(bi10.includes("enchantable(12)"), "boost: beheksbaarheid");
+ok(!bi10.includes("stacksTo("), "boost: stacksTo overslagen bij duurzaamheid");
+
+const bb10 = b10["src/main/java/com/tester3/boost_mod/ModBlocks.java"];
+ok(bb10.includes("explosionResistance(12.0F)"), "boost: explosieweerstand");
+ok(bb10.includes("friction(0.90F)"), "boost: wrijving (mojmap friction)");
+ok(bb10.includes("noCollission()"), "boost: geen botsing (mojmap noCollission)");
+ok(bb10.includes("net.minecraft.world.level.material.MapColor.COLOR_PURPLE"), "boost: kaartkleur (FQN)");
+ok(bb10.includes("randomTicks()"), "boost: random ticks");
+
+const model10 = JSON.parse(b10["src/main/resources/assets/boost_mod/models/block/glitch_blok.json"]);
+ok(model10.elements && model10.elements.length === 1, "3D-vorm → maatwerk model met elementen");
+ok(model10.elements[0].from[1] === 0 && model10.elements[0].to[1] === 12, "3D-vorm → hoogte 0..12");
+ok(model10.elements[0].from[0] === 4 && model10.elements[0].to[0] === 12, "3D-vorm → gecentreerd (x 4..12 bij w=8)");
+ok(model10.elements[0].faces.north.texture === "#0", "3D-vorm → gezichten gekoppeld aan textuur");
+
+const ench10 = JSON.parse(b10["src/main/resources/data/boost_mod/enchantment/thermal.json"]);
+ok(ench10.max_level === 3 && ench10.weight === 8, "enchants → JSON basisvelden");
+ok(ench10.effects["minecraft:damage"], "enchants → schade-effect");
+ok(ench10.description.translate === "enchantment.boost_mod.thermal", "enchants → translate-key");
+ok(ench10.slots[0] === "hand" && ench10.supported_items === "#minecraft:enchantable/weapon", "enchants → slots + supported_items");
+const enchV = b10["src/main/resources/data/boost_mod/enchantment/vergiftig.json"];
+ok(enchV.includes("minecraft:post_attack") && enchV.includes("minecraft:poison"), "enchants → status-effect bij hit");
+const enchK = b10["src/main/resources/data/boost_mod/enchantment/hamerstoot.json"];
+ok(enchK.includes("minecraft:knockback"), "enchants → knockback-effect");
+ok(b10["src/main/resources/assets/boost_mod/lang/en_us.json"].includes("enchantment.boost_mod.thermal"), "enchants → en_us taal-key");
+ok(b10["src/main/resources/assets/boost_mod/lang/nl_nl.json"].includes("Thermisch"), "enchants → nl_nl taal-key");
+
+const ent10 = b10["src/main/java/com/tester3/boost_mod/entity/JagerMobEntity.java"];
+ok(ent10.includes("MeleeAttackGoal"), "gedrag-preset → MeleeAttackGoal (mojmap)");
+ok(ent10.includes("NearestAttackableTargetGoal"), "gedrag-preset → doel op spelers");
+ok(ent10.includes("net.minecraft.world.entity.ai.goal"), "gedrag → FQN goal-imports");
+ok(ent10.includes("blockyModTriggers"), "animatie-triggers → methode aanwezig");
+ok(ent10.includes("public void aiStep()"), "animatie-triggers → aiStep-hook (26.3)");
+ok(ent10.includes("SoundEvents.ENTITY_PIG_AMBIENT"), "trigger → voorbeeld-geluid");
+ok(ent10.includes("tickCount % 100 == 0"), "trigger → timer elke 5 sec");
+ok(b10["ai-code/animaties/jager_mob.md"] !== undefined, "ai-code → animatie-prompt-bestand");
+ok(b10["ai-code/animaties/jager_mob.md"].includes("blockyModTriggers"), "prompt noemt de trigger-methode");
+
+// ── 1.20.1 (yarn) ──
+p4.meta.mcVersion = "1.20.1";
+const y10 = Exporters.buildTextFiles(p4);
+const yi10 = y10["src/main/java/com/tester3/boost_mod/ModItems.java"];
+ok(yi10.includes("rarity(net.minecraft.util.Rarity.EPIC)"), "yarn: rarity (yarn-FQN)");
+ok(yi10.includes("maxDamage(250)") && yi10.includes("fireproof()"), "yarn: duurzaamheid + fireproof");
+ok(yi10.includes("new FabricItemSettings().maxDamage(250)"), "yarn: keten op FabricItemSettings (1.20.1)");
+const yb10 = y10["src/main/java/com/tester3/boost_mod/ModBlocks.java"];
+ok(yb10.includes("slipperiness(0.90F)"), "yarn: wrijving → slipperiness");
+ok(yb10.includes("noCollision()"), "yarn: noCollision (yarn-naam)");
+ok(yb10.includes("net.minecraft.block.MapColor.COLOR_PURPLE"), "yarn: MapColor (yarn-FQN)");
+ok(yb10.includes("explosionResistance(12.0F)"), "yarn: explosieweerstand");
+const ye10 = y10["src/main/java/com/tester3/boost_mod/ModEnchantments.java"];
+ok(ye10 !== undefined, "yarn → ModEnchantments.java aangemaakt");
+ok(ye10.includes("Registry.ENCHANTMENT"), "yarn → registratie via Registry");
+ok(ye10.includes("getMinCost"), "yarn → kosten-methode");
+ok(ye10.includes("doPostAttack"), "yarn → status-effect via doPostAttack");
+ok(ye10.includes("getAttackDamage"), "yarn → schade via getAttackDamage");
+ok(y10["src/main/java/com/tester3/boost_mod/ModMain.java"].includes("ModEnchantments.register()"), "yarn → ModMain start enchants");
+ok(y10["src/main/resources/data/boost_mod/enchantment/thermal.json"] === undefined, "yarn → geen enchantment-JSON (Java i.p.v.)");
+const yent10 = y10["src/main/java/com/tester3/boost_mod/entity/JagerMobEntity.java"];
+ok(yent10.includes("this.age % 100 == 0"), "yarn → timer-trigger gebruikt age");
+ok(yent10.includes("protected void tickMovement()"), "yarn → tickMovement-hook");
+ok(yent10.includes("MeleeAttackGoal"), "yarn → gedrag-preset ook in yarn");
+State.removeProject(p4.meta.modId);
+
+
 console.log("\n──────────────────────────────");
 if (failures) {
   console.error(` ${failures} controle(s) mislukt.`);

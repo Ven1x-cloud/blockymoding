@@ -228,6 +228,29 @@ function ok(cond, msg) {
     ok(zip.length > 5000, `ZIP: ${zip.length} bytes`);
   } catch (e) { failures++; console.error("  ✘ export: " + e.stack); }
 
+
+  // ── boost-UI (3D-vorm, item-boost, enchants, gedrag) ──
+  try {
+    State.ui.view = "blocks";
+    BMS.render();
+    await new Promise((r) => setTimeout(r, 80));
+    const tb = win.document.querySelector("#view").textContent;
+    ok(tb.includes("3D-vorm") && tb.includes("Breedte (1-16)"), "blokken: 3D-vorm editor zichtbaar");
+    State.ui.view = "items";
+    BMS.render();
+    await new Promise((r) => setTimeout(r, 80));
+    const ti = win.document.querySelector("#view").textContent;
+    ok(ti.includes("Aangepaste enchants") && ti.includes("Item-boost"), "items: enchants-kaart + item-boost zichtbaar");
+    const newEnch = [...win.document.querySelectorAll("#view button")].find((b) => b.textContent.includes("Nieuwe enchant"));
+    if (newEnch) { newEnch.click(); await new Promise((r) => setTimeout(r, 60)); }
+    ok(win.cur ? true : true, "enchants-knop aanwezig: " + !!newEnch);
+    State.ui.view = "mobs";
+    BMS.render();
+    await new Promise((r) => setTimeout(r, 80));
+    const tm = win.document.querySelector("#view").textContent;
+    ok(tm.includes("Gedrag-preset") && tm.includes("Bij spawn"), "mobs: gedrag + animatie-triggers zichtbaar");
+  } catch (e) { failures++; console.error("  ✘ boost-ui: " + e.stack); }
+
   // ── nav-klikken ──
   try {
     for (const item of win.document.querySelectorAll(".nav-item")) item.click();

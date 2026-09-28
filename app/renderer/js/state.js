@@ -64,6 +64,7 @@ const State = (() => {
       workstations: [],
       mobs: [],
       story: { chapters: [] },
+      enchants: [],
       aiFiles: []
     };
   }

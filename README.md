@@ -38,6 +38,9 @@ dat je één regel code hoeft te typen. De app genereert een complete
 > Je kunt dit gewoon in de **hoofdmap** van het project draaien – `npm install`
 > pakt de app automatisch mee (de echte app zit in `\app`, dat regelt de root
 > zelf). *(Na het samenvoegen van de PR naar `main` werkt dezelfde truc met `main`.)*
+>
+> Lukt de root-install niet (bijv. een npm-recursiefout op Windows)? Doe het
+> handmatig – dat werkt altijd: `cd app` → `npm install` → `npm start`.
 
 **Optie 2 – Electron-app (dubbelklik)**
 

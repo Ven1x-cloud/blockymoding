@@ -1,6 +1,6 @@
 {
   "format": "blockymod-studio/1",
-  "pushedAt": "2026-09-29T15:59:05.152Z",
+  "pushedAt": "2026-09-29T16:01:01.617Z",
   "project": {
     "meta": {
       "name": "Mijn eerste Mod",
@@ -1768,8 +1768,8 @@
         },
         "effects": [
           {
-            "eff": "minecraft:speed",
-            "dur": 60,
+            "eff": "mijn_eerste_mod:glitcheffect",
+            "dur": 600,
             "amp": 0
           }
         ]

@@ -123,7 +123,7 @@ officiële Mojang-mappings, Java 25). Optioneel ook **1.20.1 / 1.21.1** (Yarn, J
 
 ## 🧪 Nieuw: effecten, drankjes, 6 texturen & eigen code
 
-- **🧪 Effecten & drankjes** (nieuw menu): eigen status-effecten (visueel óf schade/genezing) en drankjes in **alle flesjes** – 🧴 drinkfles, 💦 spetter (splash), ☁️ wolk (lingering) **én op een pijl**. Met kleur, meerdere effecten en **brouwen** in het brouwstandaard (basis + ingrediënt).
+- **🧪 Effecten & drankjes** (nieuw menu): eigen status-effecten (visueel, schade, genezing of 🌀 Glitch – met eigen glitch-logo) en drankjes in **alle flesjes** – 🧴 drinkfles, 💦 spetter (splash), ☁️ wolk (lingering) **én op een pijl**. Met kleur, meerdere effecten en **brouwen** in het brouwstandaard (basis + ingrediënt).
 - **🧱 6 texturen per blok**: per kant (voor/achter/links/rechts/boven/onder) een eigen textuur, plus **📷 Foto importeren** in elke textuur-bewerker.
 - **🧊 Multi-vorm 3D-editor**: meerdere vormen per blok én per item – met eigen kleur, positie en scheve hoek (zo bouw je een toren: basis → ➕ Vorm → Pos Y +16 → laatste vorm scheef).
 - **🔊 Geluid bij interactie**: rechtsklik-op-blok, gebruik-van-item én rechtsklik-op-mob (ook zonder GUI).

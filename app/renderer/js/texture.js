@@ -511,5 +511,46 @@ const TextureKit = (() => {
     return c;
   }
 
-  return { PALETTE, generate, drawPixels, pixelsToCanvas, canvasToPngBytes, mountEditor, shade, avgColor, stripPng, armorPng, bottlePng, arrowPng };
+  /** Glitch-logo (effecticoon): RGB-split, scanlines, dode pixels, barst. Vast patroon = altijd identiek. */
+  function glitchPng(size, color) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const x = c.getContext("2d");
+    const u = size / 16;
+    x.imageSmoothingEnabled = false;
+    x.clearRect(0, 0, size, size);
+    const hex = String(color || "#b708c4").replace(/^#/, "").padEnd(6, "0").slice(0, 6);
+    const cr = parseInt(hex.slice(0, 2), 16) || 183;
+    const cg = parseInt(hex.slice(2, 4), 16) || 8;
+    const cb = parseInt(hex.slice(4, 6), 16) || 196;
+    // 1) RGB-split ghosts (cyaan + roze verschoven)
+    x.fillStyle = "rgba(0, 255, 255, 0.85)";
+    x.fillRect(2 * u, 3 * u, 11 * u, 11 * u);
+    x.fillStyle = "rgba(255, 0, 128, 0.85)";
+    x.fillRect(4 * u, 5 * u, 11 * u, 11 * u);
+    // 2) hoofdvlak in eigen kleur
+    x.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.9)`;
+    x.fillRect(3 * u, 4 * u, 11 * u, 11 * u);
+    // 3) scanlines weghalen (transparante spleten)
+    x.globalCompositeOperation = "destination-out";
+    for (let i = 0; i < 6; i++) x.fillRect(0, (4.6 + i * 2.1) * u, 16 * u, 0.8 * u);
+    x.globalCompositeOperation = "source-over";
+    // 4) dode/verschoven blokjes (vast patroon)
+    x.fillStyle = "#000000";
+    [[5, 6, 3, 1], [9, 9, 2, 2], [4, 11, 4, 1], [10, 5, 1, 3], [6, 12, 2, 1]]
+      .forEach(([dx, dy, dw, dh]) => x.fillRect(dx * u, dy * u, dw * u, dh * u));
+    // 5) diagonale barst
+    x.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    x.lineWidth = Math.max(1, u);
+    x.beginPath();
+    x.moveTo(3 * u, 14 * u);
+    x.lineTo(14 * u, 3 * u);
+    x.stroke();
+    // 6) randje
+    x.strokeStyle = "rgba(0, 0, 0, 0.65)";
+    x.strokeRect(3 * u, 4 * u, 11 * u, 11 * u);
+    return c;
+  }
+
+  return { PALETTE, generate, drawPixels, pixelsToCanvas, canvasToPngBytes, mountEditor, shade, avgColor, stripPng, armorPng, bottlePng, arrowPng, glitchPng };
 })();

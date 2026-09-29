@@ -1301,6 +1301,64 @@ ${tabAdds}
         overrides = moj
           ? ` {\n                // ⚠️ Tick-methode-namen verschillen per mappings-versie (AI-fix bij compile-fout)\n                @Override\n                public boolean shouldApplyEffectTickThisTick(int duration, int amplifier) {\n                    return duration % 60 == 0;\n                }\n\n                @Override\n                public void applyEffectTick(net.minecraft.world.entity.LivingEntity entity, int amplifier) {\n                    entity.heal(1.0F);\n                }\n            }`
           : ` {\n                // ⚠️ Tick-methode-namen verschillen per mappings-versie (AI-fix bij compile-fout)\n                @Override\n                public boolean canApplyUpdateEffect(int duration, int amplifier) {\n                    return duration % 60 == 0;\n                }\n\n                @Override\n                public void applyUpdateEffect(net.minecraft.entity.LivingEntity entity, int amplifier) {\n                    entity.heal(1.0F);\n                }\n            }`;
+      } else if (e.gedrag === "glitch") {
+        overrides = moj
+          ? ` {
+                // 🌀 GLITCH: portaal-deeltjes + gekke sprongen + willekeurige effect-wissels
+                // ⚠️ Tick-methode-namen kunnen per mappings-versie wijzigen → AI-fix bij compile-fout
+                @Override
+                public boolean shouldApplyEffectTickThisTick(int duration, int amplifier) {
+                    return duration % 10 == 0;
+                }
+
+                @Override
+                public void applyEffectTick(net.minecraft.world.entity.LivingEntity entity, int amplifier) {
+                    if (entity.level() instanceof net.minecraft.server.level.ServerLevel bmGl) {
+                        bmGl.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
+                                entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
+                                8, 0.35, 0.6, 0.35, 0.01);
+                    }
+                    float r1 = entity.getRandom().nextFloat() - 0.5F;
+                    float r2 = entity.getRandom().nextFloat() - 0.5F;
+                    entity.setDeltaMovement(entity.getDeltaMovement().add(r1 * 0.6D, 0.22D, r2 * 0.6D));
+                    if (duration % 40 == 0) {
+                        int pick = entity.getRandom().nextInt(4);
+                        var fx = pick == 0 ? net.minecraft.world.effect.MobEffects.SPEED
+                                : pick == 1 ? net.minecraft.world.effect.MobEffects.SLOWNESS
+                                : pick == 2 ? net.minecraft.world.effect.MobEffects.JUMP_BOOST
+                                : net.minecraft.world.effect.MobEffects.GLOWING;
+                        entity.addEffect(new net.minecraft.world.effect.MobEffectInstance(fx, 120, pick == 2 ? 1 : 0));
+                    }
+                }
+            }`
+          : ` {
+                // 🌀 GLITCH: portaal-deeltjes + gekke sprongen + willekeurige effect-wissels
+                // ⚠️ Tick-methode-namen kunnen per mappings-versie wijzigen → AI-fix bij compile-fout
+                @Override
+                public boolean canApplyUpdateEffect(int duration, int amplifier) {
+                    return duration % 10 == 0;
+                }
+
+                @Override
+                public void applyUpdateEffect(net.minecraft.entity.LivingEntity entity, int amplifier) {
+                    if (entity.getWorld() instanceof net.minecraft.server.world.ServerWorld bmGl) {
+                        bmGl.spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL,
+                                entity.getX(), entity.getY() + entity.getHeight() * 0.5, entity.getZ(),
+                                8, 0.35, 0.6, 0.35, 0.01);
+                    }
+                    float r1 = entity.getRandom().nextFloat() - 0.5F;
+                    float r2 = entity.getRandom().nextFloat() - 0.5F;
+                    entity.setVelocity(entity.getVelocity().add(r1 * 0.6, 0.22, r2 * 0.6));
+                    if (duration % 40 == 0) {
+                        int pick = entity.getRandom().nextInt(4);
+                        net.minecraft.entity.effect.StatusEffect fx = pick == 0 ? net.minecraft.entity.effect.StatusEffects.SPEED
+                                : pick == 1 ? net.minecraft.entity.effect.StatusEffects.SLOWNESS
+                                : pick == 2 ? net.minecraft.entity.effect.StatusEffects.JUMP_BOOST
+                                : net.minecraft.entity.effect.StatusEffects.GLOWING;
+                        entity.addStatusEffect(new net.minecraft.entity.effect.StatusEffectInstance(fx, 120, pick == 2 ? 1 : 0));
+                    }
+                }
+            }`;
       }
       const cn = constname(e.id);
       if (moj) {
@@ -3640,7 +3698,10 @@ public final class StoryEvents {
     for (const fx of (p.effects || [])) {
       jobs.push({
         path: `src/main/resources/assets/${ns}/textures/mob_effect/${fx.id}.png`,
-        render: async () => TextureKit.canvasToPngBytes(TextureKit.armorPng(18, 18, fx.kleur || "#55cc55", 1))
+        render: async () => TextureKit.canvasToPngBytes(
+          fx.gedrag === "glitch"
+            ? TextureKit.glitchPng(18, fx.kleur || "#b708c4")
+            : TextureKit.armorPng(18, 18, fx.kleur || "#55cc55", 1))
       });
     }
     // wapenlagen (equipped-variant): 26.x → equipment-texturen, 1.20.1 → models/armor

@@ -1784,8 +1784,10 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
             field("Gedrag (26.3 & 1.20.1)", selectInput([
               ["geen", "🎨 Alleen visueel (icon/rookje)"],
               ["schade", "☠ Doet schade (tick)"],
-              ["genezing", "💚 Geneest (tick)"]
-            ], fx.gedrag || "geen", (v) => { fx.gedrag = v; State.save(); })),
+              ["genezing", "💚 Geneest (tick)"],
+              ["glitch", "🌀 Glitch (kapotte matrix)"]
+            ], fx.gedrag || "geen", (v) => { fx.gedrag = v; State.save(); }),
+            "🌀 = portaal-deeltjes, gekke sprongen & willekeurige effect-wissels + glitch-logo"),
             field("Effect-id in de game", el("span", { class: "small dim", text: p.meta.modId + ":" + (fx.id || "?") })),
             field("", el("button", { class: "mc-btn mc-btn-xs mc-btn-red", text: "🗑 Verwijder", onclick: () => { p.effects.splice(i, 1); changed(); } }))
           )

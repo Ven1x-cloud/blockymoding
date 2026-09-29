@@ -548,6 +548,7 @@ p6.mobs.push({
   colors: { primary: "#cc2222", secondary: "#221111" }, guiId: null, drops: []
 });
 p6.effects.push({ id: "vonk", naam: "Vonk", kleur: "#ff8800", gedrag: "schade" });
+p6.effects.push({ id: "matrix_glitch", naam: "Glitch", kleur: "#b708c4", gedrag: "glitch" });
 p6.potions.push({
   id: "snel_drankje", naam: "Snel Drankje", kleur: "#33aaff",
   bottles: { normaal: true, splash: true, lingering: true, pijl: true },
@@ -573,6 +574,7 @@ const paths12 = jobs12.map((j) => j.path).join("\n");
 const effM = e12["src/main/java/com/tester5/alchemy_mod/ModEffects.java"];
 ok(effM !== undefined, "26.3 → ModEffects.java aangemaakt");
 ok(effM.includes("MobEffectCategory.HARMFUL") && effM.includes("shouldApplyEffectTickThisTick"), "26.3 → effect met schade-tick (⚠️ tik-naam: AI-fix bij compile-fout)");
+ok(effM.includes("ParticleTypes.PORTAL") && effM.includes("setDeltaMovement") && effM.includes("MobEffects.SPEED") && effM.includes("MobEffects.GLOWING"), "26.3 → Glitch-effect: deeltjes + gekke sprongen + willekeurige effect-wissels");
 const itemsM = e12["src/main/java/com/tester5/alchemy_mod/ModItems.java"];
 ok(itemsM.includes("BMDrinkItem("), "26.3 → drinkfles-klasse gebruikt");
 ok(itemsM.includes("SplashPotionItem(") && itemsM.includes("LingeringPotionItem(") && itemsM.includes("TippedArrowItem("), "26.3 → splash/lingering/pijl-flesjes");
@@ -601,6 +603,8 @@ ok(String(bm12.textures.face_front || "").includes("toren_blok_front"), "6 gezic
 ok(paths12.includes("textures/block/toren_blok_vorm1.png") && paths12.includes("textures/block/toren_blok_front.png"), "textuurjobs → kleur + gezicht-PNG's");
 ok(paths12.includes("textures/item/snel_drankje.png") && paths12.includes("textures/item/snel_drankje_lingering.png"), "textuurjobs → flesjes-PNG's");
 ok(paths12.includes("textures/mob_effect/vonk.png"), "textuurjobs → effect-icoon");
+ok(paths12.includes("textures/mob_effect/matrix_glitch.png"), "textuurjobs → glitch-logo als effect-icoon");
+ok(typeof TextureKit.glitchPng === "function", "TextureKit.glitchPng aanwezig (logo-generator)");
 
 // ── 1.20.1 (yarn) ──
 p6.meta.mcVersion = "1.20.1";
@@ -613,6 +617,7 @@ ok(potY.includes("Registry.POTION") && potY.includes("class Drink") && potY.incl
 ok(potY.includes('new Drink("alchemy_mod:snel_drankje"'), "yarn → drinkfles met Potion-NBT");
 const effY = y12["src/main/java/com/tester5/alchemy_mod/ModEffects.java"];
 ok(effY.includes("StatusEffectCategory.HARMFUL") && effY.includes("canApplyUpdateEffect"), "yarn → effect met schade-tick (⚠️ tik-naam: AI-fix bij compile-fout)");
+ok(effY.includes("ParticleTypes.PORTAL") && effY.includes("getVelocity") && effY.includes("StatusEffects.SPEED") && effY.includes("StatusEffects.GLOWING"), "yarn → Glitch-effect: deeltjes + gekke sprongen + effect-wissels");
 const mainY12 = y12["src/main/java/com/tester5/alchemy_mod/ModMain.java"];
 ok(mainY12.includes("ModEffects.register()") && mainY12.includes("ModPotions.register()"), "yarn ModMain → effect/drank-register");
 ok(mainY12.includes("BrewingRecipeRegistry.registerPotionRecipe") && mainY12.includes('"minecraft", "awkward"') && mainY12.includes("Items.REDSTONE"), "yarn → Fabric-brouwrecept");

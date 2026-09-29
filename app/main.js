@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -54,6 +55,27 @@ ipcMain.handle('save-zip', async (event, suggestedName, base64Data) => {
 ipcMain.handle('open-path', async (event, target) => {
   if (!target || !fs.existsSync(target)) return false;
   shellOpen(target);
+  return true;
+});
+
+// 🔄 App bijwerken: git pull --ff-only in de repo waarin deze app draait
+ipcMain.handle('app-pull', async () => {
+  const repoRoot = path.join(__dirname, '..');
+  return new Promise((resolve) => {
+    execFile('git', ['pull', '--ff-only'], { cwd: repoRoot, timeout: 60000, windowsHide: true }, (err, stdout, stderr) => {
+      if (err) {
+        resolve({ ok: false, error: String(stderr || err.message || err).trim() });
+      } else {
+        resolve({ ok: true, out: String(stdout || '').trim() });
+      }
+    });
+  });
+});
+
+// App opnieuw starten zodat de bijgewerkte bestanden laden
+ipcMain.handle('app-relaunch', async () => {
+  app.relaunch();
+  app.exit(0);
   return true;
 });
 

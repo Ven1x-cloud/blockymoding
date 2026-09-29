@@ -2207,6 +2207,33 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       el("div", { class: "inline-info small", text: "💡 Lezen kan zonder token (publieke repo); pushen én privé-repos hebben de token nodig – die blijft alleen op deze computer. Per mod een eigen map? Vul die in bij 'Map met AI-codes' (bv. mods/mijn-mod/ai-code)." })
     ));
 
+    // ── app zelf bijwerken (git pull + herstart) ──
+    root.appendChild(el("div", { class: "card" },
+      el("h3", { class: "card-title", text: "🔄 App zelf bijwerken (nieuwe functies)" }),
+      el("div", { class: "row", style: "align-items:center;gap:10px;flex-wrap:wrap" },
+        el("button", {
+          class: "mc-btn mc-btn-blue", text: "🔄 App bijwerken (git pull)",
+          onclick: async () => {
+            const api = window.blockymoding;
+            if (!api || !api.isDesktop) {
+              toast("Dit kan alleen in de desktop-app (Start.bat), niet in de browser.", "err");
+              return;
+            }
+            toast("Bijwerken bij GitHub…", "info");
+            const r = await api.appPull();
+            if (!r || !r.ok) {
+              toast("❌ Bijwerken mislukt: " + String((r && r.error) || "onbekend").slice(0, 220), "err");
+              toast("Tip: cmd → cd %USERPROFILE%\\blockymoding → git pull", "info");
+              return;
+            }
+            toast("✔ Bijgewerkt – de app start opnieuw op…", "ok");
+            setTimeout(() => { try { api.appRelaunch(); } catch (e) { /* handmatig herstarten */ } }, 900);
+          }
+        }),
+        el("span", { class: "dim small", text: "Haalt de nieuwste app-versie op (functies/fixes) en herstart zichzelf. Niet hetzelfde als 'Codes ophalen' – die haalt alleen bestanden uit je ai-code-map op." })
+      )
+    ));
+
     // ── codes ophalen ──
     const browseCard = el("div", { class: "card" },
       el("h3", { class: "card-title", text: "2 · Codes ophalen & alles pushen" })
@@ -2310,6 +2337,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       el("button", { class: "mc-btn mc-btn-green", text: "📤 Alles pushen naar GitHub", onclick: () => pushToGitHub() })
     ));
     browseCard.appendChild(el("div", { class: "small dim mt", text: "📤 Push zet project.json + code + texturen in mods/" + p.meta.modId + "/ (één commit op branch " + (gh.branch || "main") + "). Heeft de token uit kaart 1 nodig." }));
+    browseCard.appendChild(el("div", { class: "small dim", text: "ℹ️ 'Codes ophalen' = AI-bestanden uit je ai-code-map. Nieuwe APP-functies komen via '🔄 App bijwerken' hierboven." }));
     root.appendChild(browseCard);
 
     // ── ingevoegde bestanden ──

@@ -131,12 +131,17 @@ officiële Mojang-mappings, Java 25). Optioneel ook **1.20.1 / 1.21.1** (Yarn, J
 - **🎬 Mob-preview**: kies loop / spring / draai-animatie in de 3D-preview.
 - **Bugfixes**: ID-vakjes onthouden je cursor (typen van een id werkt weer) en de 3D-blok-kubus is weer zichtbaar (was een klein stipje door een eenheids-fout).
 
-Bijwerken op Windows (in cmd):
+Bijwerken op Windows – **twee manieren**:
+
+1. **In de app (makkelijkst):** tab 🤖 AI-code / GitHub → **🔄 App bijwerken (git pull)** → de app herstart zichzelf.
+2. **In cmd:**
 
 ```bat
 cd %USERPROFILE%\blockymoding
 git pull
 ```
+
+Let op: **🔄 Codes ophalen** is iets anders – dat haalt alleen AI-bestanden uit je `ai-code/`-map op, geen nieuwe app-functies.
 
 ## 📤 Alles naar GitHub (knop)
 

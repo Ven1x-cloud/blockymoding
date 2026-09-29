@@ -1,0 +1,12 @@
+{
+  "name": "blockymoding",
+  "version": "1.1.0",
+  "private": true,
+  "description": "BlockyMod Studio – maak simpel Minecraft-mods. Vanaf deze map: npm install  daarna  npm start",
+  "scripts": {
+    "postinstall": "node postinstall.js",
+    "start": "npm --prefix app start",
+    "check": "npm --prefix app run check"
+  },
+  "license": "MIT"
+}

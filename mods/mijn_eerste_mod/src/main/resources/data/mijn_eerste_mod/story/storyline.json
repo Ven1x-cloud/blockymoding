@@ -1,0 +1,50 @@
+{
+  "chapters": [
+    {
+      "id": "hoofdstuk_1",
+      "title": "Hoofdstuk 1",
+      "events": [
+        {
+          "id": "ev_mulm3b7h_1t",
+          "trigger": {
+            "type": "join"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "text": "hello..."
+            },
+            {
+              "type": "weather",
+              "state": "thunder"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hoofdstuk_2",
+      "title": "why not try to glitch?",
+      "events": [
+        {
+          "id": "ev_mulm5gij_1u",
+          "trigger": {
+            "type": "block",
+            "block": "minecraft:lever"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "text": "why not try to glitch?"
+            },
+            {
+              "type": "spawn",
+              "entity": "g_li_tch",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

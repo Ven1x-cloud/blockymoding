@@ -746,15 +746,16 @@ pre.codeblock {
 .shape3d-stage::after { content: ""; position: absolute; left: 50%; bottom: 26px; width: 140px; height: 26px; transform: translateX(-50%); background: radial-gradient(ellipse, rgba(20, 30, 50, .30), rgba(20, 30, 50, 0) 70%); pointer-events: none; }
 .shape3d-stage:active { cursor: grabbing; }
 .shape3d-pivot { transform-style: preserve-3d; position: relative; z-index: 1; }
-.shape3d-cube { --w: 16px; --h: 16px; --d: 16px; position: relative; width: 0; height: 0; transform-style: preserve-3d; }
+.shape3d-handle { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); z-index: 3; background: rgba(20, 30, 50, .78); color: #fff; font-size: 11px; padding: 3px 12px; border-radius: 999px; pointer-events: none; letter-spacing: .3px; }
+.shape3d-cube.active .shape3d-face { border-color: #2b6cd4; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3), 0 0 0 1px rgba(43, 108, 212, .55); }
+.shape3d-cube { --w: 16; --h: 16; --d: 16; position: relative; width: 0; height: 0; transform-style: preserve-3d; }
 .shape3d-face { position: absolute; left: 0; top: 0; image-rendering: pixelated; background-color: #9aa2ad; background-size: 100% 100%; border: 2px solid rgba(12, 18, 30, .8); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); filter: brightness(1.22) contrast(1.04); }
-.shape3d-front  { width: calc(var(--w) * 10px); height: calc(var(--h) * 10px); transform: translate(-50%, -50%) translateZ(calc(var(--d) * 5px)); }
-.shape3d-back   { width: calc(var(--w) * 10px); height: calc(var(--h) * 10px); transform: translate(-50%, -50%) rotateY(180deg) translateZ(calc(var(--d) * 5px)); }
-.shape3d-right  { width: calc(var(--d) * 10px); height: calc(var(--h) * 10px); transform: translate(-50%, -50%) rotateY(90deg) translateZ(calc(var(--w) * 5px)); }
-.shape3d-left   { width: calc(var(--d) * 10px); height: calc(var(--h) * 10px); transform: translate(-50%, -50%) rotateY(-90deg) translateZ(calc(var(--w) * 5px)); }
-.shape3d-top    { width: calc(var(--w) * 10px); height: calc(var(--d) * 10px); transform: translate(-50%, -50%) rotateX(90deg) translateZ(calc(var(--h) * 5px)); }
-.shape3d-bottom { width: calc(var(--w) * 10px); height: calc(var(--d) * 10px); transform: translate(-50%, -50%) rotateX(-90deg) translateZ(calc(var(--h) * 5px)); }
-.shape3d-bottom { width: calc(var(--w) * 8px); height: calc(var(--d) * 8px); transform: translate(-50%, -50%) rotateX(-90deg) translateZ(calc(var(--h) * 4px)); }
+.shape3d-front  { width: calc(var(--w) * 11px); height: calc(var(--h) * 11px); transform: translate(-50%, -50%) translateZ(calc(var(--d) * 5.5px)); }
+.shape3d-back   { width: calc(var(--w) * 11px); height: calc(var(--h) * 11px); transform: translate(-50%, -50%) rotateY(180deg) translateZ(calc(var(--d) * 5.5px)); }
+.shape3d-right  { width: calc(var(--d) * 11px); height: calc(var(--h) * 11px); transform: translate(-50%, -50%) rotateY(90deg) translateZ(calc(var(--w) * 5.5px)); }
+.shape3d-left   { width: calc(var(--d) * 11px); height: calc(var(--h) * 11px); transform: translate(-50%, -50%) rotateY(-90deg) translateZ(calc(var(--w) * 5.5px)); }
+.shape3d-top    { width: calc(var(--w) * 11px); height: calc(var(--d) * 11px); transform: translate(-50%, -50%) rotateX(90deg) translateZ(calc(var(--h) * 5.5px)); }
+.shape3d-bottom { width: calc(var(--w) * 11px); height: calc(var(--d) * 11px); transform: translate(-50%, -50%) rotateX(-90deg) translateZ(calc(var(--h) * 5.5px)); }
 
 /* ── 🧊 Mob-3D preview (voorvertoning met loop-animatie) ── */
 .m3d-stage { position: relative; width: 100%; height: 210px; background: linear-gradient(#e6edf7, #c9d4e6); border: 1px solid #a9b6cb; border-radius: 10px; overflow: hidden; display: flex; align-items: flex-end; justify-content: center; perspective: 800px; }
@@ -771,6 +772,10 @@ pre.codeblock {
 .m3d-rig.playing .m3d-leg1, .m3d-rig.playing .m3d-leg3 { animation: m3d-step .55s ease-in-out infinite alternate; }
 .m3d-rig.playing .m3d-leg2, .m3d-rig.playing .m3d-leg4 { animation: m3d-step .55s ease-in-out infinite alternate-reverse; }
 .m3d-rig.playing .m3d-head { animation: m3d-look 2.2s ease-in-out infinite alternate; }
+.m3d-rig.anim-spring { animation: m3d-bounce .65s ease-in-out infinite; }
+.m3d-rig.anim-spin { animation: m3d-spin 2.6s linear infinite; }
+@keyframes m3d-bounce { 0%, 100% { transform: rotateX(-14deg) rotateY(-30deg) translateY(0); } 50% { transform: rotateX(-14deg) rotateY(-30deg) translateY(-34px); } }
+@keyframes m3d-spin { from { transform: rotateX(-14deg) rotateY(-30deg); } to { transform: rotateX(-14deg) rotateY(330deg); } }
 @keyframes m3d-step { from { transform: rotate(24deg); } to { transform: rotate(-24deg); } }
 @keyframes m3d-look { from { transform: rotate(-7deg); } to { transform: rotate(9deg); } }
 

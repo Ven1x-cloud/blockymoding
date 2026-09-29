@@ -67,6 +67,8 @@ const State = (() => {
       enchants: [],
       sounds: [],
       quests: [],
+      effects: [],
+      potions: [],
       aiFiles: []
     };
   }
@@ -120,6 +122,8 @@ const State = (() => {
     copy.sounds = copy.sounds || [];
     copy.quests = copy.quests || [];
     copy.enchants = copy.enchants || [];
+    copy.effects = copy.effects || [];
+    copy.potions = copy.potions || [];
     copy.github = copy.github || { owner: "", repo: "", branch: "main", folder: "ai-code", token: "" };
     if (copy.github) copy.github.token = ""; // token nooit importeren
     copy.meta.created = Date.now();

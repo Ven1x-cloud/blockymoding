@@ -26,7 +26,24 @@
     );
   }
 
+  /** Gedeelde geluidskeuze voor interactie (blok/item/mob). */
+  function soundSelect(p, obj, key, label, hint) {
+    return field(label, selectInput([
+      ["", "— geen geluid —"],
+      ["vanilla:ENTITY_PIG_AMBIENT", "Varken"],
+      ["vanilla:ENTITY_CAT_AMBIENT", "Kat"],
+      ["vanilla:ENTITY_WOLF_GROWL", "Wolf"],
+      ["vanilla:ENTITY_ENDER_DRAGON_GROWL", "Enderdraak"],
+      ["vanilla:ENTITY_RAVAGER_ROAR", "Ravager"],
+      ["vanilla:BLOCK_NOTE_BLOCK_PLING", "Note-block pling"],
+      ["vanilla:ITEM_BELL_RING", "Klok"],
+      ["vanilla:PLAYER_LEVELUP", "Level-up"],
+      ...((p.sounds || []).map((s) => ["mod:" + s.id, "🔊 " + (s.naam || s.id) + " (eigen)"]))
+    ], obj[key] || "", (v) => { obj[key] = v; State.save(); }), hint);
+  }
+
   function textInput(value, onInput, attrs) {
+    if (attrs && attrs.focusKey) attrs["data-focus-key"] = attrs.focusKey;
     return el("input", Object.assign({
       class: "mc-input", value: value ?? "",
       oninput: (e) => onInput(e.target.value)
@@ -126,6 +143,7 @@
     guis: renderGuis,
     mobs: renderMobs,
     story: renderStory,
+    potions: renderPotions,
     github: renderGithub
   };
 
@@ -139,6 +157,9 @@
   });
 
   function render() {
+    const ae = document.activeElement;
+    const fKey = ae && ae.getAttribute && ae.getAttribute("data-focus-key");
+    const fStart = fKey && ae.selectionStart != null ? ae.selectionStart : null;
     updateChrome();
     const fn = VIEWS[State.ui.view] || renderDashboard;
     const v = view();
@@ -149,6 +170,15 @@
       return;
     }
     fn(v);
+    if (fKey) {
+      const t = document.querySelector('[data-focus-key="' + fKey + '"]');
+      if (t) {
+        t.focus();
+        if (fStart != null && t.setSelectionRange) {
+          try { t.setSelectionRange(fStart, fStart); } catch (e) {}
+        }
+      }
+    }
   }
 
   // ══════════════════════════════════════════════
@@ -366,6 +396,165 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     toast("Blok toegevoegd – ontwerp je textuur!", "ok");
   }
 
+  // ── Gedeelde 3D-vorm editor (blokken + items): meerdere vormen, kleur, rotatie ──
+  function shapeEditorCard(host, owner) {
+    if (!Array.isArray(owner.shapes) || !owner.shapes.length) {
+      const base = owner.shape || { w: 16, h: 16, d: 16 };
+      owner.shapes = [Object.assign({ name: "basis", color: "", rotAxis: "", rotAngle: 0 }, base)];
+    }
+    const els = owner.shapes;
+    if (State.ui.shapeIdx == null || State.ui.shapeIdx >= els.length) State.ui.shapeIdx = 0;
+    const syncLegacy = () => { owner.shape = { w: els[0].w, h: els[0].h, d: els[0].d }; };
+
+    host.appendChild(el("div", { class: "sep" }));
+    host.appendChild(el("h3", { class: "card-title", text: "🧊 3D-vorm (meerdere vormen)" }));
+    const wrap = el("div", { class: "shape-editor" });
+    const stage = el("div", { class: "shape3d-stage" });
+    stage.appendChild(el("div", { class: "shape3d-handle", text: "⠿ Sleep om te draaien" }));
+    const pivot = el("div", { class: "shape3d-pivot" });
+    stage.appendChild(pivot);
+    let rotY = -28, rotX = -22, drag = null;
+    const applyRot = () => { pivot.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`; };
+    let cubes = [];
+    const S = 10;
+    const upd = () => {
+      cubes.forEach((c) => {
+        const e = c.e;
+        const w = +e.w || 16, h = +e.h || 16, d = +e.d || 16;
+        const x = e.x == null ? (16 - w) / 2 : (+e.x || 0);
+        const y = e.y == null ? 0 : (+e.y || 0);
+        const z = e.z == null ? (16 - d) / 2 : (+e.z || 0);
+        c.cube.style.setProperty("--w", String(w));
+        c.cube.style.setProperty("--h", String(h));
+        c.cube.style.setProperty("--d", String(d));
+        const tx = (x + w / 2 - 8) * S, ty = -(y + h / 2 - 8) * S, tz = (z + d / 2 - 8) * S;
+        let tf = `translate3d(${tx}px, ${ty}px, ${tz}px)`;
+        if (e.rotAxis && +e.rotAngle) tf += ` rotate${e.rotAxis.toUpperCase()}(${+e.rotAngle}deg)`;
+        c.cube.style.transform = tf;
+        try {
+          const fm = owner.faceTex || {};
+          const mainPx = (owner.pixels && owner.pixels.length === 256) ? owner.pixels : TextureKit.generate("ruis", "#888", 1);
+          Object.keys(c.faces).forEach((k) => {
+            let px = mainPx;
+            if (fm[k] && fm[k].length) px = fm[k];
+            else if (e.color) px = TextureKit.generate("vlak", e.color, 1);
+            const url = TextureKit.pixelsToCanvas(px, 16).toDataURL();
+            c.faces[k].style.backgroundImage = "url(" + url + ")";
+          });
+        } catch (err) { /* geen canvas beschikbaar */ }
+      });
+    };
+    const rebuildCubes = () => {
+      pivot.innerHTML = ""; cubes = [];
+      els.forEach((e, i) => {
+        const cube = el("div", { class: "shape3d-cube" + (i === State.ui.shapeIdx ? " active" : "") });
+        const faces = {};
+        ["front", "back", "right", "left", "top", "bottom"].forEach((f) => {
+          faces[f] = el("div", { class: "shape3d-face shape3d-" + f });
+          cube.appendChild(faces[f]);
+        });
+        pivot.appendChild(cube);
+        cubes.push({ e, cube, faces });
+      });
+      upd();
+    };
+    stage.addEventListener("pointerdown", (e) => {
+      drag = { x: e.clientX, y: e.clientY };
+      if (stage.setPointerCapture && e.pointerId != null) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* ok */ } }
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      rotY += (e.clientX - drag.x) * 0.5;
+      rotX = Math.max(-80, Math.min(80, rotX - (e.clientY - drag.y) * 0.5));
+      drag = { x: e.clientX, y: e.clientY };
+      applyRot();
+    });
+    const endDrag = () => { drag = null; };
+    stage.addEventListener("pointerup", endDrag);
+    stage.addEventListener("pointercancel", endDrag);
+    wrap.appendChild(stage);
+
+    const info = el("div", { style: "flex:1;min-width:260px" });
+    const chipRow = el("div", { class: "row", style: "flex-wrap:wrap;gap:6px;margin-bottom:6px" });
+    const fieldsBox = el("div");
+    info.append(chipRow, fieldsBox);
+    wrap.appendChild(info);
+    host.appendChild(wrap);
+
+    const save = () => { syncLegacy(); State.save(); upd(); };
+    const numF = (key, label, min, max) => {
+      const a = els[State.ui.shapeIdx];
+      return field(label, textInput(a[key] == null ? 0 : a[key], (v) => {
+        a[key] = Math.max(min, Math.min(max, parseInt(v, 10) || 0));
+        save();
+      }, { type: "number", min: String(min), max: String(max) }));
+    };
+    const rebuildSide = () => {
+      chipRow.innerHTML = ""; fieldsBox.innerHTML = "";
+      els.forEach((e, i) => {
+        chipRow.appendChild(el("button", {
+          class: "mc-btn mc-btn-xs " + (i === State.ui.shapeIdx ? "mc-btn-blue" : "mc-btn-ghost"),
+          text: (i + 1) + " " + (e.name || "vorm"),
+          onclick: () => { State.ui.shapeIdx = i; render(); }
+        }));
+      });
+      chipRow.appendChild(el("button", {
+        class: "mc-btn mc-btn-xs mc-btn-green", text: "➕ Vorm",
+        title: "Nieuwe vorm erbij (staat standaard bovenop de rest – handig voor torens)",
+        onclick: () => {
+          let top = 0;
+          els.forEach((e) => { top = Math.max(top, (+e.y || 0) + (+e.h || 16)); });
+          els.push({ name: "vorm" + (els.length + 1), w: 8, h: 8, d: 8, x: 4, y: Math.min(24, Math.max(0, top - 0)), z: 4, color: "", rotAxis: "", rotAngle: 0 });
+          State.ui.shapeIdx = els.length - 1;
+          changed();
+        }
+      }));
+      const a = els[State.ui.shapeIdx];
+      fieldsBox.appendChild(el("div", { class: "grid3" },
+        numF("w", "Breedte (1-32)", 1, 32),
+        numF("h", "Hoogte (1-32)", 1, 32),
+        numF("d", "Diepte (1-32)", 1, 32)
+      ));
+      fieldsBox.appendChild(el("div", { class: "grid3" },
+        numF("x", "Pos X (0-31)", 0, 31),
+        numF("y", "Pos Y (omhoog)", 0, 31),
+        numF("z", "Pos Z (0-31)", 0, 31)
+      ));
+      fieldsBox.appendChild(el("div", { class: "grid3" },
+        field("Naam", textInput(a.name || "", (v) => { a.name = v; State.save(); rebuildChipsOnly(); })),
+        field("Kleur", el("input", { class: "mc-input", type: "color", value: a.color || "#9aa2ad", title: "Eigen kleur voor deze vorm ( anders de bloktextuur )", oninput: (e) => { a.color = e.target.value; save(); } })),
+        field("Naam vorm", el("span", { class: "small dim", text: "kleur → eigen 16×16 textuur" }))
+      ));
+      const rotRow = el("div", { class: "grid3" },
+        field("Rotatie-as", selectInput([["", "— recht —"], ["x", "X (voor/achter kantelen)"], ["y", "Y (draaien)"], ["z", "Z (links/rechts kantelen)"]], a.rotAxis || "", (v) => { a.rotAxis = v; save(); })),
+        field("Hoek", selectInput([["0", "0°"], ["22.5", "22,5°"], ["45", "45°"], ["-22.5", "−22,5°"], ["-45", "−45°"]], String(a.rotAngle || 0), (v) => { a.rotAngle = parseFloat(v) || 0; save(); })),
+        field("Snelsels", el("div", { class: "row", style: "gap:4px" },
+          el("button", { class: "mc-btn mc-btn-xs mc-btn-ghost", text: "⬛ Vol", onclick: () => { Object.assign(a, { w: 16, h: 16, d: 16, x: 0, y: 0, z: 0, rotAngle: 0 }); changed(); } }),
+          el("button", { class: "mc-btn mc-btn-xs mc-btn-ghost", text: "▬ Plaat", onclick: () => { Object.assign(a, { w: 16, h: 2, d: 16, x: 0, y: 0, z: 0 }); changed(); } }),
+          el("button", { class: "mc-btn mc-btn-xs mc-btn-ghost", text: "🪵 Pilaar", onclick: () => { Object.assign(a, { w: 8, h: 16, d: 8, x: 4, y: 0, z: 4 }); changed(); } })
+        ))
+      );
+      fieldsBox.appendChild(rotRow);
+      if (els.length > 1) {
+        fieldsBox.appendChild(el("div", { class: "row mt" },
+          el("button", {
+            class: "mc-btn mc-btn-xs mc-btn-red", text: "🗑 Deze vorm verwijderen",
+            onclick: () => { els.splice(State.ui.shapeIdx, 1); State.ui.shapeIdx = Math.max(0, State.ui.shapeIdx - 1); changed(); }
+          })
+        ));
+      }
+      fieldsBox.appendChild(el("div", { class: "small dim mt", text: "🗼 Toren-voorbeeld: laat 'basis' vol staan (16³) → klik ➕ Vorm (staat bovenop) → verhoog Pos Y met 16 → nog een ➕ → laatste vorm: rotatie-as X of Z + 45° voor 'scheef naar buiten'. Alle vormen worden samen 1 model in de export." }));
+      applyRot();
+    };
+    const rebuildChipsOnly = () => {
+      const btns = chipRow.querySelectorAll("button");
+      if (btns[State.ui.shapeIdx]) btns[State.ui.shapeIdx].textContent = (State.ui.shapeIdx + 1) + " " + (els[State.ui.shapeIdx].name || "vorm");
+    };
+    rebuildCubes();
+    rebuildSide();
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => { upd(); applyRot(); });
+  }
+
   function renderBlocks(root) {
     const p = cur();
     sectionTitle("Blokken", "Ontwerp blokken met textuur en eigenschappen – de app genereert alle bestanden.").forEach((n) => root.appendChild(n));
@@ -403,7 +592,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ed.appendChild(el("h3", { class: "card-title", text: "Blok bewerken" }));
       ed.appendChild(el("div", { class: "grid2" },
         field("Naam (in de game)", textInput(sel.name, (v) => { sel.name = v; State.save(); updateChrome(); })),
-        field("ID", textInput(sel.id, (v) => { sel.id = sanitizeId(v); State.ui.sel.blocks = sel.id; changed(); }), "Uniek – wordt " + p.meta.modId + ":<id>")
+        field("ID", textInput(sel.id, (v) => { sel.id = sanitizeId(v); State.ui.sel.blocks = sel.id; changed(); }, { focusKey: "id-blok", title: "Uniek – wordt " + p.meta.modId + ":<id>" }), "Uniek – wordt " + p.meta.modId + ":<id>")
       ));
       ed.appendChild(el("div", { class: "grid3" },
         field("Hardheid", textInput(sel.hardness, (v) => { sel.hardness = parseFloat(v) || 0; State.save(); }, { type: "number", step: "0.1", min: "0" }), "0 = instant, 50 = obsidiaan-achtig"),
@@ -411,6 +600,9 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
         field("Lichtsterkte (0-15)", textInput(sel.light, (v) => { sel.light = Math.max(0, Math.min(15, parseInt(v, 10) || 0)); State.save(); }, { type: "number", min: "0", max: "15" }))
       ));
       ed.appendChild(checkInput("Heeft gereedschap nodig om te breken", sel.requiresTool, (v) => { sel.requiresTool = v; State.save(); }));
+      ed.appendChild(el("div", { class: "grid2 mt" },
+        soundSelect(p, sel, "interactSound", "🔊 Geluid bij rechtsklik", "iedereen hoort het als het blok wordt aangeklikt")
+      ));
 
       // ── extra eigenschappen ──
       ed.appendChild(el("div", { class: "grid3" },
@@ -423,68 +615,53 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
         checkInput("Willekeurige ticks (gewas-gedrag)", !!sel.randomTicks, (v) => { sel.randomTicks = v; State.save(); })
       ));
 
-      // ── 3D-vorm (maatwerk-model) ──
+      shapeEditorCard(ed, sel);
+
+      // ── 6 gezichten: eigen textuur per kant ──
       ed.appendChild(el("div", { class: "sep" }));
-      ed.appendChild(el("h3", { class: "card-title", text: "🧊 3D-vorm (maatwerk-model)" }));
-      if (!sel.shape) sel.shape = { w: 16, h: 16, d: 16 };
-      const sh = sel.shape;
-      const shapeWrap = el("div", { class: "shape-editor" });
-      const stage = el("div", { class: "shape3d-stage" });
-      const cube = el("div", { class: "shape3d-cube" });
-      const faces = {};
-      ["front", "back", "right", "left", "top", "bottom"].forEach((f) => {
-        faces[f] = el("div", { class: "shape3d-face shape3d-" + f });
-        cube.appendChild(faces[f]);
+      ed.appendChild(el("h3", { class: "card-title", text: "🎨 Gezichten (6 kanten – per kant een textuur)" }));
+      if (!sel.faceTex) sel.faceTex = {};
+      const FACE_NAMES = [["front", "⬜ Voor"], ["back", "⬛ Achter"], ["left", "◱ Links"], ["right", "◲ Rechts"], ["top", "▲ Boven"], ["bottom", "▼ Onder"]];
+      if (State.ui.faceIdx == null || State.ui.faceIdx >= FACE_NAMES.length) State.ui.faceIdx = 0;
+      const tabs = el("div", { class: "row", style: "flex-wrap:wrap;gap:6px" });
+      FACE_NAMES.forEach(([k, lbl], i) => {
+        const own = sel.faceTex[k] && sel.faceTex[k].length;
+        tabs.appendChild(el("button", {
+          class: "mc-btn mc-btn-xs " + (i === State.ui.faceIdx ? "mc-btn-blue" : "mc-btn-ghost"),
+          text: (own ? "✏️ " : "") + lbl,
+          onclick: () => { State.ui.faceIdx = i; render(); }
+        }));
       });
-      const pivot = el("div", { class: "shape3d-pivot" }, cube);
-      stage.appendChild(pivot);
-      let rotY = -28, rotX = -22, drag = null;
-      const applyRot = () => { pivot.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`; };
-      const upd = () => {
-        cube.style.setProperty("--w", sh.w + "px");
-        cube.style.setProperty("--h", sh.h + "px");
-        cube.style.setProperty("--d", sh.d + "px");
-        try {
-          const url = TextureKit.pixelsToCanvas(sel.pixels || TextureKit.generate("ruis", "#888", 1), 16).toDataURL();
-          Object.keys(faces).forEach((k) => { faces[k].style.backgroundImage = "url(" + url + ")"; });
-        } catch (e) { /* geen canvas beschikbaar */ }
-      };
-      stage.addEventListener("pointerdown", (e) => {
-        drag = { x: e.clientX, y: e.clientY };
-        if (stage.setPointerCapture && e.pointerId != null) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* ok */ } }
-      });
-      stage.addEventListener("pointermove", (e) => {
-        if (!drag) return;
-        rotY += (e.clientX - drag.x) * 0.5;
-        rotX = Math.max(-80, Math.min(80, rotX - (e.clientY - drag.y) * 0.5));
-        drag = { x: e.clientX, y: e.clientY };
-        applyRot();
-      });
-      const endDrag = () => { drag = null; };
-      stage.addEventListener("pointerup", endDrag);
-      stage.addEventListener("pointercancel", endDrag);
-      const shapeSlider = (key, label, min, max) => field(label, textInput(sh[key], (v) => {
-        sh[key] = Math.max(min, Math.min(max, parseInt(v, 10) || max));
-        State.save(); upd();
-      }, { type: "number", min: String(min), max: String(max) }));
-      shapeWrap.appendChild(stage);
-      const shapeInfo = el("div", { style: "flex:1;min-width:220px" });
-      shapeInfo.appendChild(el("div", { class: "grid3" },
-        shapeSlider("w", "Breedte (1-16)", 1, 16),
-        shapeSlider("h", "Hoogte (1-16)", 1, 16),
-        shapeSlider("d", "Diepte (1-16)", 1, 16)
-      ));
-      shapeInfo.appendChild(el("div", { class: "row", style: "flex-wrap:wrap;margin-top:6px" },
-        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "⬛ Vol blok", onclick: () => { Object.assign(sh, { w: 16, h: 16, d: 16 }); State.save(); render(); } }),
-        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "▬ Halve steen", onclick: () => { Object.assign(sh, { w: 16, h: 8, d: 16 }); State.save(); render(); } }),
-        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "🪵 Pilaar", onclick: () => { Object.assign(sh, { w: 8, h: 16, d: 8 }); State.save(); render(); } }),
-        el("button", { class: "mc-btn mc-btn-ghost mc-btn-xs", text: "📄 Plaat", onclick: () => { Object.assign(sh, { w: 16, h: 2, d: 16 }); State.save(); render(); } })
-      ));
-      shapeInfo.appendChild(el("div", { class: "small dim mt", text: "Sleep over de preview om te draaien. Anders dan 16×16×16 → maatwerk model-JSON in de export. Botsing blijft voorlopig kubisch (vraag de AI voor vorm-botsing)." }));
-      shapeWrap.appendChild(shapeInfo);
-      ed.appendChild(shapeWrap);
-      const bootShape = () => { upd(); applyRot(); };
-      if (typeof requestAnimationFrame === "function") requestAnimationFrame(bootShape); else bootShape();
+      ed.appendChild(tabs);
+      const fk = FACE_NAMES[State.ui.faceIdx][0];
+      const faceBody = el("div", { class: "mt" });
+      ed.appendChild(faceBody);
+      if (sel.faceTex[fk] && sel.faceTex[fk].length) {
+        faceBody.appendChild(el("div", { class: "row mb" },
+          el("button", {
+            class: "mc-btn mc-btn-xs mc-btn-ghost", text: "↔ Terug naar hoofdtextuur",
+            onclick: () => { sel.faceTex[fk] = null; State.save(); render(); }
+          })
+        ));
+        const fh = el("div");
+        faceBody.appendChild(fh);
+        TextureKit.mountEditor(fh, {
+          size: 16, pixels: sel.faceTex[fk],
+          onChange: (px) => { sel.faceTex[fk] = px; State.save(); }
+        });
+      } else {
+        faceBody.appendChild(el("div", { class: "row" },
+          el("button", {
+            class: "mc-btn mc-btn-sm mc-btn-green", text: "✏️ Eigen textuur voor deze kant",
+            onclick: () => {
+              sel.faceTex[fk] = (sel.pixels && sel.pixels.length === 256) ? sel.pixels.slice() : TextureKit.generate("ruis", "#888", 1);
+              State.save(); render();
+            }
+          }),
+          el("span", { class: "small dim", text: "Deze kant gebruikt nu dezelfde textuur als de rest." })
+        ));
+        faceBody.appendChild(el("div", { class: "small dim mt", text: "💡 Tip: 6 losse texturen → boven bijv. gras, onder aarde. Elk vakje heeft ook de 📲 Foto-knop." }));
+      }
 
       ed.appendChild(el("div", { class: "sep" }));
       ed.appendChild(el("h3", { class: "card-title", text: "Textuur (16×16)" }));
@@ -526,7 +703,17 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       list.innerHTML = "";
       if (!p.enchants.length) list.appendChild(el("div", { class: "small dim", text: "Nog geen enchants – klik op ➕ Nieuwe enchant." }));
       p.enchants.forEach((e, i) => {
-        const effectFields = (e.effect === "status")
+        const effectFields = (e.effect === "eigen")
+          ? el("div", {},
+              field("🧩 Eigen code (draait bij elke hit)", el("textarea", {
+                class: "mc-input", rows: "5",
+                style: "min-height:90px;font-family:monospace",
+                placeholder: "26.3: game-commando's (één per regel)\n1.20.1: Java-code, bv. living.setSecondsOnFire(2);",
+                value: e.eigenCode || "",
+                oninput: (ev) => { e.eigenCode = ev.target.value; State.save(); }
+              }), "26.3 → mcfunction-commando's · 1.20.1 → Java in de enchant-klasse")
+            )
+          : (e.effect === "status")
           ? el("div", { class: "grid3" },
               field("Status-effect", textInput(e.statusId || "minecraft:poison", (v) => { e.statusId = v.trim() || "minecraft:poison"; State.save(); }, { placeholder: "minecraft:poison" })),
               field("Duur per niveau (sec)", textInput(e.statusDur ?? 3, (v) => { e.statusDur = Math.max(1, parseInt(v, 10) || 1); State.save(); }, { type: "number", min: "1" })),
@@ -544,7 +731,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
             field("Max niveau", textInput(e.maxLevel || 3, (v) => { e.maxLevel = Math.max(1, Math.min(5, parseInt(v, 10) || 1)); State.save(); }, { type: "number", min: "1", max: "5" }))
           ),
           el("div", { class: "grid3" },
-            field("Effect", selectInput([["schade", "⚔ Extra schade"], ["status", "☣ Effect bij hit"], ["knockback", "🌊 Terugslag bij hit"]], e.effect || "schade", (v) => { e.effect = v; changed(); })),
+            field("Effect", selectInput([["schade", "⚔ Extra schade"], ["status", "☣ Effect bij hit"], ["knockback", "🌊 Terugslag bij hit"], ["eigen", "🧩 Eigen code"]], e.effect || "schade", (v) => { e.effect = v; changed(); })),
             field("Vindbaarheid", textInput(e.weight ?? 10, (v) => { e.weight = Math.max(1, Math.min(30, parseInt(v, 10) || 1)); State.save(); }, { type: "number", min: "1", max: "30" }), "hoog = vaker in tafel"),
             field("Werkt op", selectInput([["hand", "Wapen (hand)"], ["mainhand", "Alleen rechterhand"], ["armor", "Pantser"], ["any", "Alles"]], e.slots || "hand", (v) => { e.slots = v; State.save(); }))
           ),
@@ -624,11 +811,14 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ed.appendChild(el("h3", { class: "card-title", text: "Item bewerken" }));
       ed.appendChild(el("div", { class: "grid2" },
         field("Naam", textInput(sel.name, (v) => { sel.name = v; State.save(); updateChrome(); })),
-        field("ID", textInput(sel.id, (v) => { sel.id = sanitizeId(v); State.ui.sel.items = sel.id; changed(); }))
+        field("ID", textInput(sel.id, (v) => { sel.id = sanitizeId(v); State.ui.sel.items = sel.id; changed(); }, { focusKey: "id-item" }))
       ));
       ed.appendChild(field("Max. stapelgrootte", textInput(sel.maxStack, (v) => {
         sel.maxStack = Math.max(1, Math.min(64, parseInt(v, 10) || 64)); State.save();
       }, { type: "number", min: "1", max: "64" })));
+      ed.appendChild(el("div", { class: "grid2 mt" },
+        soundSelect(p, sel, "interactSound", "🔊 Geluid bij gebruik (rechtsklik)", "klinkt als iemand het item gebruikt")
+      ));
 
       ed.appendChild(el("div", { class: "sep" }));
       ed.appendChild(el("h3", { class: "card-title", text: "⚡ Item-boost" }));
@@ -668,6 +858,8 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
         ed.appendChild(el("div", { class: "small dim", text: "🧪 Zichtbaarheid: ① inventaris-icoon = de textuur hieronder, ② in je hand (andere spelers zien het ook), ③ op je lijf – de app genereert daarvoor automatisch de wapenlagen én het uitrustings-asset. Zet Duurzaamheid op >0 (bijv. 165), anders standaard per positie." }));
         if (sel.frames && sel.frames.length) ed.appendChild(el("div", { class: "small dim", text: "🎞 Dit item is geanimeerd: het icoon speelt af in de inventaris én in de hand." }));
       }
+
+      shapeEditorCard(ed, sel);
 
       ed.appendChild(el("div", { class: "sep" }));
       ed.appendChild(el("h3", { class: "card-title", text: "Textuur (16×16)" }));
@@ -1344,7 +1536,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ed.appendChild(el("h3", { class: "card-title", text: "Mob bewerken" }));
       ed.appendChild(el("div", { class: "grid2" },
         field("Naam", textInput(sel.name, (v) => { sel.name = v; State.save(); updateChrome(); })),
-        field("ID", textInput(sel.id, (v) => { sel.id = sanitizeId(v); State.ui.sel.mobs = sel.id; changed(); })),
+        field("ID", textInput(sel.id, (v) => { sel.id = sanitizeId(v); State.ui.sel.mobs = sel.id; changed(); }, { focusKey: "id-mob" })),
         field("Soort", selectInput([["passive", "Vreedzaam"], ["hostile", "Hostiel"]], sel.kind, (v) => { sel.kind = v; changed(); })),
         field("Interactie-GUI (rechtsklik)", selectInput(
           [["", "— geen GUI —"], ...p.guis.map((g) => [g.id, g.name + " (" + g.mode + ")"])],
@@ -1358,10 +1550,6 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       ));
       // 🧊 3D-preview met loop-animatie (voorvertoning)
       const m3dCard = el("div", { class: "card" });
-      m3dCard.appendChild(el("div", { class: "row" },
-        el("strong", { text: "🧊 3D-preview met animatie" }),
-        el("span", { class: "dim small", text: "voorvertoning – in-game gebruikt Minecraft het varkensmodel met je kleuren; echte ledemaat-animaties komen via ai-code/animaties/" })
-      ));
       const m3dStage = el("div", { class: "m3d-stage" });
       const m3dRig = el("div", { class: "m3d-rig" });
       const m3dParts = ["m3d-head", "m3d-body", "m3d-leg m3d-leg1", "m3d-leg m3d-leg2", "m3d-leg m3d-leg3", "m3d-leg m3d-leg4"]
@@ -1371,16 +1559,37 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       m3dRig.style.setProperty("--c2", sel.colors.secondary || "#222222");
       m3dStage.appendChild(m3dRig);
       let m3dPlaying = State.ui.m3dPlay !== false;
+      const applyM3d = () => {
+        const m = State.ui.m3dAnim || "lopen";
+        m3dRig.classList.remove("playing", "anim-spring", "anim-spin");
+        if (m === "lopen" && m3dPlaying) m3dRig.classList.add("playing");
+        if (m === "springen") m3dRig.classList.add("anim-spring");
+        if (m === "draaien") m3dRig.classList.add("anim-spin");
+      };
+      const m3dAnimSel = el("select", {
+        class: "mc-input", style: "max-width:170px",
+        onchange: (ev) => { State.ui.m3dAnim = ev.target.value; State.save(); applyM3d(); }
+      },
+        el("option", { value: "lopen", text: "🦵 Lopen" }),
+        el("option", { value: "springen", text: "🦘 Springen" }),
+        el("option", { value: "draaien", text: "🔄 Draaien" }),
+        el("option", { value: "stil", text: "🧍 Stilstaan" }));
+      m3dAnimSel.value = State.ui.m3dAnim || "lopen";
       const m3dBtn = el("button", {
         class: "mc-btn mc-btn-sm", text: m3dPlaying ? "⏸ Pauze" : "▶ Lopen",
         onclick: (e) => {
           m3dPlaying = !m3dPlaying;
           State.ui.m3dPlay = m3dPlaying;
-          m3dRig.classList.toggle("playing", m3dPlaying);
+          applyM3d();
           e.target.textContent = m3dPlaying ? "⏸ Pauze" : "▶ Lopen";
         }
       });
-      if (m3dPlaying) m3dRig.classList.add("playing");
+      applyM3d();
+      m3dCard.appendChild(el("div", { class: "row" },
+        el("strong", { text: "🧊 3D-preview met animatie" }),
+        m3dAnimSel,
+        el("span", { class: "dim small", text: "voorvertoning – in-game gebruikt Minecraft het varkensmodel met je kleuren; echte ledemaat-animaties komen via ai-code/animaties/" })
+      ));
       m3dCard.appendChild(el("div", { class: "row mb" }, m3dBtn, el("span", { class: "dim small", text: "draaiende kop + loop-ende poten" })));
       m3dCard.appendChild(m3dStage);
       ed.appendChild(m3dCard);
@@ -1439,6 +1648,16 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       if ((sel.triggerSound || "").startsWith("mod:") || sel.triggerParticle) {
         ed.appendChild(el("div", { class: "small dim", text: "🔧 Wordt direct in de entity-klasse gegenereerd (spawn + elke 5 sec). Eigen geluiden komen uit jouw ModSounds." }));
       }
+      ed.appendChild(el("div", { class: "grid2 mt" },
+        soundSelect(p, sel, "interactSound", "🔊 Geluid bij rechtsklik (interactie)", "speelt als iemand de mob aanklikt – ook zonder GUI")
+      ));
+      ed.appendChild(field("🧩 Eigen code (elke tick)", el("textarea", {
+        class: "mc-input", rows: "4",
+        style: "min-height:80px;font-family:monospace",
+        placeholder: "Java-code die elke tick in de mob draait – schrijf het zelf of laat de AI het doen",
+        value: sel.eigenCode || "",
+        oninput: (ev) => { sel.eigenCode = ev.target.value; State.save(); }
+      }), "wordt bmEigenCode() in de entity-klasse (AI én jij kunnen dit vullen)"));
 
       // spawn-ei kleuren
       ed.appendChild(el("div", { class: "sep" }));
@@ -1514,6 +1733,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     command: "⌨ Commando uitvoeren",
     geluid: "🔊 Geluid afspelen",
     partikel: "✨ Partikel tonen",
+    effect: "🧪 Effect geven",
     next: "➡ Volgend hoofdstuk"
   };
 
@@ -1527,6 +1747,148 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       events: []
     });
     changed();
+  }
+
+  // ══════════════════════════════════════════════
+  //  EFFECTEN & DRANKJES
+  // ══════════════════════════════════════════════
+
+  function renderPotions(root) {
+    const p = cur();
+    if (!p) return;
+    if (!p.effects) p.effects = [];
+    if (!p.potions) p.potions = [];
+
+    const vanillaFx = ["minecraft:speed", "minecraft:slowness", "minecraft:strength", "minecraft:heal", "minecraft:harming",
+      "minecraft:poison", "minecraft:regeneration", "minecraft:fire_resistance", "minecraft:invisibility",
+      "minecraft:jump_boost", "minecraft:night_vision", "minecraft:water_breathing", "minecraft:resistance",
+      "minecraft:absorption", "minecraft:hunger", "minecraft:weakness", "minecraft:glowing", "minecraft:levitation"];
+
+    // ── Eigen effecten ──
+    const c1 = el("div", { class: "card" });
+    c1.appendChild(el("h3", { class: "card-title", text: "✨ Eigen effecten (status-effecten)" }));
+    c1.appendChild(el("p", { class: "dim small", text: "Een effect komt uit een drankje, een mob, een blok (verhaal-actie 'Effect geven') of een enchant. Id's: mod-id:naam – bruikbaar in het hele verhaal-systeem." }));
+    const fxList = el("div");
+    c1.appendChild(fxList);
+    const renderFx = () => {
+      fxList.innerHTML = "";
+      if (!p.effects.length) fxList.appendChild(el("div", { class: "small dim", text: "Nog geen eigen effecten. Vanilla-effecten (minecraft:speed etc.) werken ook overal zonder dit." }));
+      p.effects.forEach((fx, i) => {
+        fxList.appendChild(el("div", { class: "card", style: "margin:8px 0;padding:10px" },
+          el("div", { class: "grid3" },
+            field("ID", textInput(fx.id, (v) => { fx.id = sanitizeId(v); State.save(); }, { focusKey: "fx-id-" + i })),
+            field("Naam", textInput(fx.naam, (v) => { fx.naam = v; State.save(); })),
+            field("Kleur", el("input", { class: "mc-input", type: "color", value: fx.kleur || "#55cc55", oninput: (e) => { fx.kleur = e.target.value; State.save(); } }))
+          ),
+          el("div", { class: "grid3" },
+            field("Gedrag (26.3 & 1.20.1)", selectInput([
+              ["geen", "🎨 Alleen visueel (icon/rookje)"],
+              ["schade", "☠ Doet schade (tick)"],
+              ["genezing", "💚 Geneest (tick)"]
+            ], fx.gedrag || "geen", (v) => { fx.gedrag = v; State.save(); })),
+            field("Effect-id in de game", el("span", { class: "small dim", text: p.meta.modId + ":" + (fx.id || "?") })),
+            field("", el("button", { class: "mc-btn mc-btn-xs mc-btn-red", text: "🗑 Verwijder", onclick: () => { p.effects.splice(i, 1); changed(); } }))
+          )
+        ));
+      });
+    };
+    renderFx();
+    c1.appendChild(el("div", { class: "row mt" },
+      el("button", {
+        class: "mc-btn mc-btn-sm mc-btn-green", text: "➕ Nieuw effect",
+        onclick: () => {
+          let n = p.effects.length + 1;
+          let id = "mijn_effect_" + n;
+          while (p.effects.some((x) => x.id === id)) { n++; id = "mijn_effect_" + n; }
+          p.effects.push({ id, naam: "Mijn Effect " + n, kleur: "#55cc55", gedrag: "geen" });
+          changed();
+        }
+      })
+    ));
+    root.appendChild(c1);
+
+    // ── Drankjes ──
+    const c2 = el("div", { class: "card mt" });
+    c2.appendChild(el("h3", { class: "card-title", text: "🧪 Drankjes (potion)" }));
+    c2.appendChild(el("p", { class: "dim small", text: "Elk drankje werkt in alle flesjes: 🧴 normaal (drinken), 💦 spetter/splash, ☁️ wolk/lingering én op een pijl 🏹. Brouwen: basis (water/ongewenst water) + ingrediënt in het brouwstandaard." }));
+    const potList = el("div");
+    c2.appendChild(potList);
+    const renderPots = () => {
+      potList.innerHTML = "";
+      if (!p.potions.length) potList.appendChild(el("div", { class: "small dim", text: "Nog geen drankjes – klik op ➕ Nieuw drankje." }));
+      p.potions.forEach((pl, i) => {
+        if (!pl.bottles) pl.bottles = { normaal: true, splash: true, lingering: true, pijl: true };
+        if (!pl.brew) pl.brew = { on: true, van: "water", ingr: "minecraft:nether_wart" };
+        if (!pl.effects || !pl.effects.length) pl.effects = [{ eff: "minecraft:speed", dur: 60, amp: 0 }];
+        const dl = el("datalist", { id: uid("pfx") });
+        [...vanillaFx, ...p.effects.map((e) => p.meta.modId + ":" + e.id)].forEach((s) => dl.appendChild(el("option", { value: s })));
+
+        const fxRows = el("div");
+        pl.effects.forEach((row, ri) => {
+          fxRows.appendChild(el("div", { class: "row", style: "gap:6px;margin-top:4px" }, dl,
+            textInput(row.eff || "minecraft:speed", (v) => { row.eff = v.trim(); State.save(); }, { list: dl.id, placeholder: "effect-id", style: "width:240px" }),
+            textInput(row.dur ?? 60, (v) => { row.dur = Math.max(1, parseInt(v, 10) || 60); State.save(); }, { type: "number", min: "1", style: "width:80px", title: "duur (sec)" }),
+            textInput(row.amp ?? 0, (v) => { row.amp = Math.max(0, parseInt(v, 10) || 0); State.save(); }, { type: "number", min: "0", style: "width:60px", title: "sterkte" }),
+            el("button", { class: "mc-btn mc-btn-xs mc-btn-ghost", text: "✕", title: "effect weg", onclick: () => { pl.effects.splice(ri, 1); changed(); } })
+          ));
+        });
+        fxRows.appendChild(el("div", { class: "row mt" },
+          el("button", {
+            class: "mc-btn mc-btn-xs mc-btn-green", text: "➕ Effect",
+            onclick: () => { pl.effects.push({ eff: "minecraft:speed", dur: 60, amp: 0 }); changed(); }
+          })
+        ));
+
+        potList.appendChild(el("div", { class: "card", style: "margin:10px 0;padding:12px" },
+          el("div", { class: "grid3" },
+            field("Naam", textInput(pl.naam, (v) => { pl.naam = v; State.save(); updateChrome(); })),
+            field("ID", textInput(pl.id, (v) => { pl.id = sanitizeId(v); State.save(); }, { focusKey: "pot-id-" + i })),
+            field("Kleur (vloeistof)", el("input", { class: "mc-input", type: "color", value: pl.kleur || "#3366cc", oninput: (e) => { pl.kleur = e.target.value; State.save(); } }))
+          ),
+          el("div", { class: "mt" }, el("strong", { text: "Effecten in dit drankje:" }), fxRows),
+          el("div", { class: "row mt", style: "flex-wrap:wrap;gap:10px" },
+            checkInput("🧴 Normaal (drinkfles)", !!pl.bottles.normaal, (v) => { pl.bottles.normaal = v; State.save(); }),
+            checkInput("💦 Spetter (splash)", !!pl.bottles.splash, (v) => { pl.bottles.splash = v; State.save(); }),
+            checkInput("☁️ Wolk (lingering)", !!pl.bottles.lingering, (v) => { pl.bottles.lingering = v; State.save(); }),
+            checkInput("🏹 Pijl", !!pl.bottles.pijl, (v) => { pl.bottles.pijl = v; State.save(); })
+          ),
+          el("div", { class: "grid3 mt" },
+            checkInput("🧪 Brouwbaar in standaard", !!pl.brew.on, (v) => { pl.brew.on = v; State.save(); }),
+            field("Basis", selectInput([["water", "Waterfles"], ["awkward", "Ongewenst water (basis)"]], pl.brew.van || "water", (v) => { pl.brew.van = v; State.save(); }), "wat erin gaat"),
+            field("Ingrediënt", selectInput([
+              ["minecraft:nether_wart", "Nether-wortel"],
+              ["minecraft:redstone", "Rode steen (langer)"],
+              ["minecraft:glowstone", "Gloeisteen (sterker)"],
+              ["minecraft:dragon_breath", "Drakenadem (→ wolk)"],
+              ["minecraft:gunpowder", "Kruit (→ spetter)"]
+            ], pl.brew.ingr || "minecraft:nether_wart", (v) => { pl.brew.ingr = v; State.save(); }))
+          ),
+          el("div", { class: "row mt" },
+            el("button", { class: "mc-btn mc-btn-xs mc-btn-red", text: "🗑 Verwijder drankje", onclick: () => { p.potions.splice(i, 1); changed(); } }),
+            el("span", { class: "small dim", text: "Geef jezelf het drankje in-game via /give @p " + p.meta.modId + ":" + pl.id + " (of uit de creatieve tab)." })
+          )
+        ));
+      });
+    };
+    renderPots();
+    c2.appendChild(el("div", { class: "row mt" },
+      el("button", {
+        class: "mc-btn mc-btn-sm mc-btn-green", text: "➕ Nieuw drankje",
+        onclick: () => {
+          let n = p.potions.length + 1;
+          let id = "mijn_drankje_" + n;
+          while (p.potions.some((x) => x.id === id)) { n++; id = "mijn_drankje_" + n; }
+          p.potions.push({
+            id, naam: "Mijn Drankje " + n, kleur: "#3366cc",
+            bottles: { normaal: true, splash: true, lingering: true, pijl: true },
+            brew: { on: true, van: "water", ingr: "minecraft:nether_wart" },
+            effects: [{ eff: "minecraft:speed", dur: 60, amp: 0 }]
+          });
+          changed();
+        }
+      })
+    ));
+    root.appendChild(c2);
   }
 
   function renderStory(root) {
@@ -1706,6 +2068,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
           geluid: { type: "geluid", sound: "minecraft:block.note_block.pling", volume: 1, pitch: 1 },
           partikel: { type: "partikel", particle: "minecraft:flame", count: 20 },
           command: { type: "command", cmd: "say Hallo!" },
+          effect: { type: "effect", effect: "minecraft:speed", dur: 10, amp: 0 },
           next: { type: "next" }
         };
         ev.actions.push(defaults[v]);
@@ -1753,6 +2116,7 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
     if (a.type === "command") return ": " + (a.cmd || "").slice(0, 30);
     if (a.type === "geluid") return ": " + (a.sound || "").split(":").pop();
     if (a.type === "partikel") return ": " + (a.particle || "").split(":").pop() + " ×" + (a.count || 20);
+    if (a.type === "effect") return ": " + (a.effect || "?") + " " + (a.dur || 10) + "s";
     return "";
   }
 
@@ -1787,6 +2151,18 @@ Of zeg tegen de AI: "maak de map mods/jouw-modnaam aan" – dan doe ik het voor 
       wrap.appendChild(el("span", { class: "row" },
         selectInput(PARTICLE_OPTS, cur, (v) => { a.particle = v; upd(); }),
         textInput(a.count ?? 20, (v) => { a.count = Math.max(1, parseInt(v, 10) || 20); upd(); }, { type: "number", min: "1", style: "width:70px", title: "aantal" })
+      ));
+    } else if (a.type === "effect") {
+      const dl = el("datalist", { id: uid("el") });
+      ["minecraft:speed", "minecraft:slowness", "minecraft:strength", "minecraft:heal", "minecraft:harming",
+        "minecraft:poison", "minecraft:regeneration", "minecraft:fire_resistance", "minecraft:invisibility",
+        "minecraft:jump_boost", "minecraft:night_vision", "minecraft:resistance",
+        ...((p.effects || []).map((e) => p.meta.modId + ":" + e.id))]
+        .forEach((s) => dl.appendChild(el("option", { value: s })));
+      wrap.appendChild(el("span", { class: "row" }, dl,
+        textInput(a.effect || "minecraft:speed", (v) => { a.effect = v.trim(); upd(); }, { list: dl.id, placeholder: "effect-id", style: "width:230px" }),
+        textInput(a.dur ?? 10, (v) => { a.dur = Math.max(1, parseInt(v, 10) || 10); upd(); }, { type: "number", min: "1", style: "width:70px", title: "duur (sec)" }),
+        textInput(a.amp ?? 0, (v) => { a.amp = Math.max(0, parseInt(v, 10) || 0); upd(); }, { type: "number", min: "0", style: "width:60px", title: "sterkte" })
       ));
     } else if (a.type === "spawn") {
       wrap.appendChild(el("span", { class: "row" },

@@ -235,7 +235,7 @@ function ok(cond, msg) {
     BMS.render();
     await new Promise((r) => setTimeout(r, 80));
     const tb = win.document.querySelector("#view").textContent;
-    ok(tb.includes("3D-vorm") && tb.includes("Breedte (1-16)"), "blokken: 3D-vorm editor zichtbaar");
+    ok(tb.includes("3D-vorm") && tb.includes("Breedte (1-32)"), "blokken: 3D-vorm editor zichtbaar");
     State.ui.view = "items";
     BMS.render();
     await new Promise((r) => setTimeout(r, 80));
@@ -273,6 +273,15 @@ function ok(cond, msg) {
     for (const item of win.document.querySelectorAll(".nav-item")) item.click();
     ok(true, "alle nav-knoppen klikbaar");
   } catch (e) { failures++; console.error("  ✘ nav: " + e.stack); }
+
+  // ── effecten & drankjes-weergave ──
+  try {
+    State.ui.view = "potions";
+    BMS.render();
+    await new Promise((r) => setTimeout(r, 60));
+    const tb = win.document.querySelector("#view").textContent;
+    ok(tb.includes("Drankjes") && tb.includes("Eigen effecten") && tb.includes("Nieuw drankje"), "potions: effecten + drankjes-weergave");
+  } catch (e) { failures++; console.error("  ✘ potions: " + e.stack); }
 
   ok(errors.length === 0, "geen ongevange window-fouten" + (errors.length ? "\n" + errors.join("\n") : ""));
   finish();

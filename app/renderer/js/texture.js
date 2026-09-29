@@ -268,9 +268,35 @@ const TextureKit = (() => {
         redraw(); emit();
       }
     });
+    const photoInput = el("input", { type: "file", accept: "image/*", style: "display:none", onchange: (ev) => {
+      const f = ev.target.files && ev.target.files[0]; if (!f) return;
+      const img = new Image();
+      img.onload = () => {
+        pushUndo();
+        const tmp = document.createElement("canvas");
+        tmp.width = size; tmp.height = size;
+        const tx = tmp.getContext("2d");
+        tx.imageSmoothingEnabled = true;
+        // centraal bijsnijden naar vierkant, dan schalen naar textuurgrootte
+        const m = Math.min(img.width, img.height);
+        tx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, size, size);
+        const d = tx.getImageData(0, 0, size, size).data;
+        for (let i = 0; i < pixels.length; i++) {
+          const a = d[i * 4 + 3];
+          pixels[i] = a < 96 ? null
+            : "#" + [d[i * 4], d[i * 4 + 1], d[i * 4 + 2]].map((v) => v.toString(16).padStart(2, "0")).join("");
+        }
+        redraw(); emit();
+        toast("Foto geïmporteerd als textuur!", "ok");
+        URL.revokeObjectURL(img.src);
+      };
+      img.src = URL.createObjectURL(f);
+      ev.target.value = "";
+    } });
+    const btnPhoto = el("button", { class: "mc-btn mc-btn-sm mc-btn-ghost", text: "📷 Foto", title: "Kies een foto – automatisch vierkant bijgesneden en geschaald naar de textuurgrootte", onclick: () => photoInput.click() }, photoInput);
 
     tools.append(
-      el("div", { class: "tool-row" }, toolRow, btnUndo, btnRedo, btnClear),
+      el("div", { class: "tool-row" }, toolRow, btnUndo, btnRedo, btnPhoto, btnClear),
       el("div", { class: "field" }, el("label", { text: "Kleur" }), palette, colorInput),
       el("div", { class: "field" },
         el("label", { text: "Snel-genereren" }),
@@ -423,5 +449,67 @@ const TextureKit = (() => {
     return canvasToPngBytes(cv);
   }
 
-  return { PALETTE, generate, drawPixels, pixelsToCanvas, canvasToPngBytes, mountEditor, shade, avgColor, stripPng, armorPng };
+  /** Eenvoudig 16×16 flesje-icoontje in de gegeven kleur. */
+  function bottlePng(size, color) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const x = c.getContext("2d");
+    const u = size / 16;
+    x.imageSmoothingEnabled = false;
+    x.clearRect(0, 0, size, size);
+    // kurk
+    x.fillStyle = "#7a5230";
+    x.fillRect(6 * u, 1 * u, 4 * u, 2 * u);
+    x.fillStyle = "#5d3e24";
+    x.fillRect(6 * u, 2 * u, 4 * u, 1 * u);
+    // hals
+    x.fillStyle = color;
+    x.fillRect(6.5 * u, 3 * u, 3 * u, 3 * u);
+    // body
+    x.fillStyle = color;
+    x.fillRect(3 * u, 6 * u, 10 * u, 9 * u);
+    // rand
+    x.strokeStyle = "rgba(10,14,24,.75)";
+    x.lineWidth = Math.max(1, u);
+    x.strokeRect(3 * u, 6 * u, 10 * u, 9 * u);
+    // glans
+    x.fillStyle = "rgba(255,255,255,.5)";
+    x.fillRect(4.5 * u, 7 * u, 1.5 * u, 7 * u);
+    x.fillStyle = "rgba(0,0,0,.25)";
+    x.fillRect(11 * u, 7 * u, 1.5 * u, 7 * u);
+    return c;
+  }
+
+  /** Eenvoudige pijl met gekleurde punt. */
+  function arrowPng(size, color) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const x = c.getContext("2d");
+    const u = size / 16;
+    x.imageSmoothingEnabled = false;
+    x.clearRect(0, 0, size, size);
+    // schacht (diagonaal)
+    x.strokeStyle = "#9a7b4f";
+    x.lineWidth = Math.max(1, 2 * u);
+    x.beginPath();
+    x.moveTo(3 * u, 13 * u);
+    x.lineTo(12 * u, 4 * u);
+    x.stroke;
+    x.stroke();
+    // punt
+    x.fillStyle = color;
+    x.beginPath();
+    x.moveTo(14 * u, 2 * u);
+    x.lineTo(15 * u, 7 * u);
+    x.lineTo(9 * u, 5 * u);
+    x.closePath();
+    x.fill();
+    // veer
+    x.fillStyle = "#d8d8d8";
+    x.fillRect(1.5 * u, 12 * u, 3 * u, 1.5 * u);
+    x.fillRect(2 * u, 10.5 * u, 1.5 * u, 3 * u);
+    return c;
+  }
+
+  return { PALETTE, generate, drawPixels, pixelsToCanvas, canvasToPngBytes, mountEditor, shade, avgColor, stripPng, armorPng, bottlePng, arrowPng };
 })();

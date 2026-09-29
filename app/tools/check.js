@@ -520,6 +520,118 @@ State.removeProject(p5.meta.modId);
 
 
 
+
+// ══════════════════════════════════════════════
+console.log("\n[12] Effecten, drankjes, interactie-geluid, multi-vorm, eigen code");
+// ══════════════════════════════════════════════
+const p6 = State.createProject("Alchemy Mod", "Tester5"); // mcVersion = 26.3 (standaard)
+p6.blocks.push({
+  id: "toren_blok", name: "Toren Blok", hardness: 1, requiresTool: false, light: 0,
+  shapes: [
+    { name: "basis", w: 16, h: 16, d: 16, x: 0, y: 0, z: 0, color: "", rotAxis: "", rotAngle: 0 },
+    { name: "toren", w: 8, h: 8, d: 8, x: 4, y: 16, z: 4, color: "#cc3333", rotAxis: "x", rotAngle: 45 }
+  ],
+  faceTex: { front: new Array(256).fill("#1188ff") },
+  interactSound: "vanilla:ITEM_BELL_RING",
+  pixels: TextureKit.generate("ruis", "#888", 3)
+});
+p6.items.push({
+  id: "bel_item", name: "Bel Item", maxStack: 1,
+  interactSound: "vanilla:ITEM_BELL_RING",
+  pixels: TextureKit.generate("ruis", "#b87333", 9)
+});
+p6.mobs.push({
+  id: "draakje", name: "Draakje", kind: "hostile", behavior: "",
+  triggers: [], interactSound: "vanilla:ENTITY_ENDER_DRAGON_GROWL",
+  eigenCode: "this.setNoGravity(!this.onGround());",
+  health: 10, speed: 0.25, damage: 2, width: 0.8, height: 0.9,
+  colors: { primary: "#cc2222", secondary: "#221111" }, guiId: null, drops: []
+});
+p6.effects.push({ id: "vonk", naam: "Vonk", kleur: "#ff8800", gedrag: "schade" });
+p6.potions.push({
+  id: "snel_drankje", naam: "Snel Drankje", kleur: "#33aaff",
+  bottles: { normaal: true, splash: true, lingering: true, pijl: true },
+  brew: { on: true, van: "awkward", ingr: "minecraft:redstone" },
+  effects: [{ eff: "alchemy_mod:vonk", dur: 45, amp: 1 }, { eff: "minecraft:speed", dur: 60, amp: 0 }]
+});
+p6.story.chapters.push({
+  id: "h1", title: "Start",
+  events: [{ id: "e1", trigger: { type: "join" }, actions: [
+    { type: "effect", effect: "alchemy_mod:vonk", dur: 5, amp: 0 }
+  ] }]
+});
+p6.enchants.push({
+  id: "mijn_eigen", name: "Mijn Eigen", maxLevel: 2, weight: 5, slots: "hand",
+  effect: "eigen", eigenCode: "target.setVelocity(0.0, 1.0, 0.0);"
+});
+
+const e12 = Exporters.buildTextFiles(p6);
+const jobs12 = Exporters.collectTextures(p6);
+const paths12 = jobs12.map((j) => j.path).join("\n");
+
+// ── 26.3 (mojmap) ──
+const effM = e12["src/main/java/com/tester5/alchemy_mod/ModEffects.java"];
+ok(effM !== undefined, "26.3 → ModEffects.java aangemaakt");
+ok(effM.includes("MobEffectCategory.HARMFUL") && effM.includes("shouldApplyEffectTickThisTick"), "26.3 → effect met schade-tick (⚠️ tik-naam: AI-fix bij compile-fout)");
+const itemsM = e12["src/main/java/com/tester5/alchemy_mod/ModItems.java"];
+ok(itemsM.includes("BMDrinkItem("), "26.3 → drinkfles-klasse gebruikt");
+ok(itemsM.includes("SplashPotionItem(") && itemsM.includes("LingeringPotionItem(") && itemsM.includes("TippedArrowItem("), "26.3 → splash/lingering/pijl-flesjes");
+ok(itemsM.includes("UseSoundItem("), "26.3 → item-interact-geluid-klasse");
+const blocksM = e12["src/main/java/com/tester5/alchemy_mod/ModBlocks.java"];
+ok(blocksM.includes("InteractBlock(") && blocksM.includes("useWithoutItem"), "26.3 → blok-interact-geluid (useWithoutItem)");
+const entM = e12["src/main/java/com/tester5/alchemy_mod/entity/DraakjeEntity.java"];
+ok(entM.includes("mobInteract") && entM.includes("SoundEvents.ENTITY_ENDER_DRAGON_GROWL"), "26.3 → mob-interact-geluid");
+ok(entM.includes("bmEigenCode") && entM.includes("setNoGravity"), "26.3 → mob eigen-code (bmEigenCode)");
+const brew = e12["src/main/resources/data/alchemy_mod/recipe/snel_drankje_brouwen.json"];
+ok(brew !== undefined && brew.includes("minecraft:brewing") && brew.includes("awkward") && brew.includes("redstone"), "26.3 → datapack-brouwrecept (water/ongewenst + ingrediënt)");
+ok(e12["src/main/resources/data/alchemy_mod/recipe/snel_drankje_brouwen_spetter.json"] !== undefined, "26.3 → kruit-recept → spetter");
+ok(e12["src/main/resources/data/alchemy_mod/recipe/snel_drankje_brouwen_wolk.json"] !== undefined, "26.3 → drakenadem-recept → wolk");
+ok(e12["src/main/resources/assets/alchemy_mod/models/item/snel_drankje_arrow.json"] !== undefined, "26.3 → pijl-model");
+const lang12 = e12["src/main/resources/assets/alchemy_mod/lang/nl_nl.json"] || "";
+ok(lang12.includes("effect.alchemy_mod.vonk") && lang12.includes("item.alchemy_mod.snel_drankje_splash"), "lang → effect + drankjes-taal");
+const stM12 = e12["src/main/java/com/tester5/alchemy_mod/story/StoryManager.java"];
+ok(stM12.includes('case "effect"') && stM12.includes("addEffect("), "26.3 → story-actie 'Effect geven'");
+ok((e12["src/main/resources/data/alchemy_mod/enchantment/mijn_eigen.json"] || "").includes("run_function"), "26.3 → enchant 'eigen' = run_function");
+ok(e12["src/main/resources/data/alchemy_mod/function/enchant_mijn_eigen.mcfunction"] !== undefined, "26.3 → enchant-eigen mcfunction-bestand");
+const bm12 = JSON.parse(e12["src/main/resources/assets/alchemy_mod/models/block/toren_blok.json"]);
+ok(Array.isArray(bm12.elements) && bm12.elements.length === 2, "multi-vorm → 2 elementen in blokmodel");
+ok(bm12.elements[1].rotation && bm12.elements[1].rotation.angle === 45, "multi-vorm → rotatie 45° op toren");
+ok(String(bm12.textures.v1 || "").includes("toren_blok_vorm1"), "multi-vorm → kleur-textuur per element");
+ok(String(bm12.textures.face_front || "").includes("toren_blok_front"), "6 gezichten → front-face-textuur gekoppeld");
+ok(paths12.includes("textures/block/toren_blok_vorm1.png") && paths12.includes("textures/block/toren_blok_front.png"), "textuurjobs → kleur + gezicht-PNG's");
+ok(paths12.includes("textures/item/snel_drankje.png") && paths12.includes("textures/item/snel_drankje_lingering.png"), "textuurjobs → flesjes-PNG's");
+ok(paths12.includes("textures/mob_effect/vonk.png"), "textuurjobs → effect-icoon");
+
+// ── 1.20.1 (yarn) ──
+p6.meta.mcVersion = "1.20.1";
+const y12 = Exporters.buildTextFiles(p6);
+const yjobs12 = Exporters.collectTextures(p6);
+const ypaths12 = yjobs12.map((j) => j.path).join("\n");
+const potY = y12["src/main/java/com/tester5/alchemy_mod/ModPotions.java"];
+ok(potY !== undefined, "yarn → ModPotions.java aangemaakt");
+ok(potY.includes("Registry.POTION") && potY.includes("class Drink") && potY.includes("class SplashB") && potY.includes("class TippedB"), "yarn → potion-registry + fles-klassen");
+ok(potY.includes('new Drink("alchemy_mod:snel_drankje"'), "yarn → drinkfles met Potion-NBT");
+const effY = y12["src/main/java/com/tester5/alchemy_mod/ModEffects.java"];
+ok(effY.includes("StatusEffectCategory.HARMFUL") && effY.includes("canApplyUpdateEffect"), "yarn → effect met schade-tick (⚠️ tik-naam: AI-fix bij compile-fout)");
+const mainY12 = y12["src/main/java/com/tester5/alchemy_mod/ModMain.java"];
+ok(mainY12.includes("ModEffects.register()") && mainY12.includes("ModPotions.register()"), "yarn ModMain → effect/drank-register");
+ok(mainY12.includes("BrewingRecipeRegistry.registerPotionRecipe") && mainY12.includes('"minecraft", "awkward"') && mainY12.includes("Items.REDSTONE"), "yarn → Fabric-brouwrecept");
+const itemsY12 = y12["src/main/java/com/tester5/alchemy_mod/ModItems.java"];
+ok(itemsY12.includes("UseSoundItem("), "yarn → item-interact-geluid-klasse");
+ok(itemsY12.includes("ItemGroupEvents") && itemsY12.includes("entries.add("), "yarn → items in de creatieve tab (nieuw)");
+const blocksY12 = y12["src/main/java/com/tester5/alchemy_mod/ModBlocks.java"];
+ok(blocksY12.includes("InteractBlock(") && blocksY12.includes("onUse("), "yarn → blok-interact-geluid (onUse)");
+const entY12 = y12["src/main/java/com/tester5/alchemy_mod/entity/DraakjeEntity.java"];
+ok(entY12.includes("interactMob") && entY12.includes("SoundEvents.ENTITY_ENDER_DRAGON_GROWL"), "yarn → mob-interact-geluid");
+ok(entY12.includes("bmEigenCode"), "yarn → mob eigen-code");
+const stY12 = y12["src/main/java/com/tester5/alchemy_mod/story/StoryManager.java"];
+ok(stY12.includes('case "effect"') && stY12.includes("addStatusEffect("), "yarn → story-actie 'Effect geven'");
+ok((y12["src/main/java/com/tester5/alchemy_mod/ModEnchantments.java"] || "").includes("Eigen code (BlockyMod Studio)"), "yarn → enchant 'eigen' in doPostAttack");
+ok(y12["src/main/resources/data/alchemy_mod/recipe/snel_drankje_brouwen.json"] === undefined, "yarn → geen datapack-brouwen (Fabric-code in ModMain)");
+ok(ypaths12.includes("textures/item/snel_drankje_splash.png"), "yarn → textuurjobs flesjes");
+ok((y12["src/main/resources/assets/alchemy_mod/lang/nl_nl.json"] || "").includes("potion.alchemy_mod.snel_drankje"), "lang → potion-naam (1.20.1)");
+State.removeProject(p6.meta.modId);
+
 console.log("\n──────────────────────────────");
 if (failures) {
   console.error(` ${failures} controle(s) mislukt.`);

@@ -172,7 +172,9 @@ const Exporters = (() => {
 
   function triggersBlock(p, m, flavor) {
     const ids = m.triggers || [];
-    if (!ids.length && !(m.triggerParticle || "") && !(m.triggerSound || "")) return "";
+    const eigenRaw = m.eigenCode == null ? "" : String(m.eigenCode);
+    const hasEigen = eigenRaw.trim().length > 0;
+    if (!ids.length && !(m.triggerParticle || "") && !(m.triggerSound || "") && !hasEigen) return "";
     const moj = flavor === "mojmap";
     const tick = moj ? "this.tickCount" : "this.age";
     const ambient = triggerSoundRef(p, m, flavor);
@@ -214,43 +216,91 @@ const Exporters = (() => {
         super.tickMovement();
         this.blockyModTriggers();
     }`;
+    const eigenMeth = hasEigen
+      ? `\n    // — Eigen code van jou (of de AI) – draait elke tick —\n    private void bmEigenCode() {\n${eigenRaw.trim().split("\n").map((l) => "        " + l).join("\n")}\n    }\n`
+      : "";
     return `    // 🎬 BlockyMod animatie-triggers – koppel hier je animaties (of laat de AI het coderen!)
     private int bmTriggerTimer = 0;
 
     private void blockyModTriggers() {
         bmTriggerTimer++;
-${L.join("\n")}
+${L.join("\n")}${hasEigen ? "\n        bmEigenCode();" : ""}
     }
 
-${hook}
+${hook}${eigenMeth}
 `;
   }
 
-  /** Blokmodel: standaard-kubus óf maatwerk element (3D-vorm uit de editor). */
+  /** Vorm-array normaliseren (blok én item): nieuw `shapes` of legacy `shape`. */
+  function shapesOf(o) {
+    if (Array.isArray(o.shapes) && o.shapes.length) return o.shapes;
+    return [o.shape || { w: 16, h: 16, d: 16 }];
+  }
+
+  /** Maatwerk-model met elementen (multi-vorm) – gedeeld voor blokken én items. */
+  function elementModel(baseTex, texDir, els, faceTex) {
+    const r = (n) => Math.round(n * 100) / 100;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, parseFloat(v) || 0));
+    const textures = { particle: baseTex, "0": baseTex };
+    const DIRMAP = { north: "front", south: "back", west: "left", east: "right", up: "top", down: "bottom" };
+    faceTex = faceTex || {};
+    for (const ui of Object.values(DIRMAP)) {
+      if (faceTex[ui] && faceTex[ui].length) textures["face_" + ui] = `${texDir}_${ui}`;
+    }
+    const elements = els.map((e, i) => {
+      const w = Math.max(1, Math.min(32, parseFloat(e.w) || 16));
+      const h = Math.max(1, Math.min(32, parseFloat(e.h) || 16));
+      const d = Math.max(1, Math.min(32, parseFloat(e.d) || 16));
+      // Legacy (zonder Pos-velden): x/z gecentreerd, y vanaf 0 – exact zoals oud gedrag
+      const x = e.x == null ? (16 - w) / 2 : clamp(e.x, -16, 31);
+      const y = e.y == null ? 0 : clamp(e.y, -16, 31);
+      const z = e.z == null ? (16 - d) / 2 : clamp(e.z, -16, 31);
+      let key = "0";
+      if (e.color) { key = "v" + i; textures[key] = `${texDir}_vorm${i}`; }
+      const mkFace = (dir) => {
+        const ui = DIRMAP[dir];
+        const k = faceTex[ui] && faceTex[ui].length ? "face_" + ui : key;
+        return { uv: [0, 0, 16, 16], texture: "#" + k };
+      };
+      const el = {
+        from: [r(x), r(y), r(z)],
+        to: [r(x + w), r(y + h), r(z + d)],
+        faces: {
+          down: mkFace("down"), up: mkFace("up"),
+          north: mkFace("north"), south: mkFace("south"),
+          west: mkFace("west"), east: mkFace("east")
+        }
+      };
+      const ang = parseFloat(e.rotAngle) || 0;
+      if (e.rotAxis && ang && ["x", "y", "z"].includes(e.rotAxis)) {
+        el.rotation = { origin: [r(x + w / 2), r(y + h / 2), r(z + d / 2)], axis: e.rotAxis, angle: ang };
+      }
+      return el;
+    });
+    return { textures, elements };
+  }
+
+  function isPlainFullCube(b) {
+    const els = shapesOf(b);
+    if (els.length !== 1) return false;
+    const e = els[0];
+    const faces = b.faceTex || {};
+    const hasFaceTex = Object.keys(faces).some((k) => faces[k] && faces[k].length);
+    return +e.w >= 16 && +e.h >= 16 && +e.d >= 16 && !(parseFloat(e.rotAngle) || 0) && !e.color && !hasFaceTex
+      && !((+e.x) || (+e.y) || (+e.z));
+  }
+
+  /** Blokmodel: standaard-kubus óf maatwerk model (3D-vorm uit de editor). */
   function blockModel(ns, b) {
     const tex = `${ns}:block/${b.id}`;
-    const sh = b.shape || { w: 16, h: 16, d: 16 };
-    const num = (v) => Math.max(1, Math.min(16, parseFloat(v) || 16));
-    const w = num(sh.w), h = num(sh.h), d = num(sh.d);
-    if (w >= 16 && h >= 16 && d >= 16) {
-      return { parent: "minecraft:block/cube_all", textures: { all: tex } };
-    }
-    const r = (n) => Math.round(n * 100) / 100;
-    const x0 = r((16 - w) / 2);
-    const z0 = r((16 - d) / 2);
-    const face = { uv: [0, 0, 16, 16], texture: "#0" };
-    return {
-      textures: { "0": tex, particle: tex },
-      elements: [{
-        from: [x0, 0, z0],
-        to: [r(x0 + w), r(h), r(z0 + d)],
-        faces: {
-          down: { ...face }, up: { ...face },
-          north: { ...face }, south: { ...face },
-          west: { ...face }, east: { ...face }
-        }
-      }]
-    };
+    if (isPlainFullCube(b)) return { parent: "minecraft:block/cube_all", textures: { all: tex } };
+    return elementModel(tex, tex.replace(/[^/]+$/, "") + b.id, shapesOf(b), b.faceTex);
+  }
+
+  /** Item-3D-model (zelfde editor als blokken) – parentloos element-model. */
+  function itemModel3d(ns, it) {
+    const tex = `${ns}:item/${it.id}`;
+    return elementModel(tex, tex, shapesOf(it), it.faceTex);
   }
 
   /** Enchantment-JSON (26.x data-driven registry). */
@@ -274,6 +324,14 @@ ${hook}
             min_duration: { type: "minecraft:linear", base: dur, per_level_above_first: 0 },
             max_duration: { type: "minecraft:linear", base: dur, per_level_above_first: 0 }
           }
+        }]
+      };
+    } else if (e.effect === "eigen") {
+      effects = {
+        "minecraft:post_attack": [{
+          enchanted: "attacker",
+          affected: "victim",
+          effect: { type: "minecraft:run_function", function: `${ns}:enchant_${e.id}` }
         }]
       };
     } else if (e.effect === "knockback") {
@@ -427,6 +485,15 @@ ${lines.join("\n")}
             if (target instanceof LivingEntity living) {
                 living.addStatusEffect(new StatusEffectInstance(StatusEffectInstances.${sconst}, ${dur}, ${amp}));
             }
+        }`;
+      } else if (e.effect === "eigen") {
+        const code = String(e.eigenCode || "// vul je eigen code in de app aan").trim();
+        effect = `
+        @Override
+        public void doPostAttack(LivingEntity attacker, Entity target, int level) {
+            super.doPostAttack(attacker, target, level);
+            // — Eigen code (BlockyMod Studio) —
+${code.split("\n").map((l) => "            " + l).join("\n")}
         }`;
       } else if (e.effect === "knockback") {
         effect = `
@@ -609,10 +676,57 @@ Triggers uit de app: ${chosen.length ? chosen.join(", ") : (m.behavior ? "gedrag
 
     // ── Items ──
     for (const it of p.items) {
-      put(`src/main/resources/assets/${ns}/models/item/${it.id}.json`, json({
-        parent: "minecraft:item/generated",
-        textures: { layer0: `${ns}:item/${it.id}` }
-      }));
+      if (!isPlainFullCube(it) && (Array.isArray(it.shapes) && it.shapes.length)) {
+        // Maatwerk 3D-vorm (gedeelde editor met blokken)
+        put(`src/main/resources/assets/${ns}/models/block/${it.id}.json`, json(itemModel3d(ns, it)));
+        put(`src/main/resources/assets/${ns}/models/item/${it.id}.json`, json({ parent: `${ns}:block/${it.id}` }));
+      } else {
+        put(`src/main/resources/assets/${ns}/models/item/${it.id}.json`, json({
+          parent: "minecraft:item/generated",
+          textures: { layer0: `${ns}:item/${it.id}` }
+        }));
+      }
+    }
+
+    // ── 🧪 Drankjes: fles-modellen ──
+    for (const pl of (p.potions || [])) {
+      const bot = bottleSet(pl);
+      for (const [on, suf] of [[bot.normaal, ""], [bot.splash, "_splash"], [bot.lingering, "_lingering"], [bot.pijl, "_arrow"]]) {
+        if (!on) continue;
+        put(`src/main/resources/assets/${ns}/models/item/${pl.id}${suf}.json`, json({
+          parent: "minecraft:item/generated",
+          textures: { layer0: `${ns}:item/${pl.id}${suf}` }
+        }));
+      }
+      if (isMojmap(p)) {
+        // 26.3: data-driven brewing (bron: minecraft.wiki – type minecraft:brewing)
+        const ingr = (pl.brew && pl.brew.ingr) || "minecraft:nether_wart";
+        const from = pl.brew && pl.brew.van === "awkward" ? "minecraft:awkward" : "minecraft:water";
+        if (pl.brew && pl.brew.on !== false) {
+          put(`src/main/resources/data/${ns}/recipe/${pl.id}_brouwen.json`, json({
+            type: "minecraft:brewing",
+            input: { item: "minecraft:potion", potion_contents: { potion: from } },
+            reagent: { item: ingr },
+            output: { id: `${ns}:${pl.id}` }
+          }));
+        }
+        if (bot.splash) {
+          put(`src/main/resources/data/${ns}/recipe/${pl.id}_brouwen_spetter.json`, json({
+            type: "minecraft:brewing",
+            input: { item: `${ns}:${pl.id}` },
+            reagent: { item: "minecraft:gunpowder" },
+            output: { id: `${ns}:${pl.id}_splash` }
+          }));
+        }
+        if (bot.lingering) {
+          put(`src/main/resources/data/${ns}/recipe/${pl.id}_brouwen_wolk.json`, json({
+            type: "minecraft:brewing",
+            input: { item: bot.splash ? `${ns}:${pl.id}_splash` : `${ns}:${pl.id}` },
+            reagent: { item: "minecraft:dragon_breath" },
+            output: { id: `${ns}:${pl.id}_lingering` }
+          }));
+        }
+      }
     }
 
     // ── Aangepaste enchants ──
@@ -620,6 +734,10 @@ Triggers uit de app: ${chosen.length ? chosen.join(", ") : (m.behavior ? "gedrag
     for (const e of enchants) {
       if (isMojmap(p)) {
         put(`src/main/resources/data/${ns}/enchantment/${e.id}.json`, json(enchantJson(p, e)));
+        if (e.effect === "eigen") {
+          put(`src/main/resources/data/${ns}/function/enchant_${e.id}.mcfunction`,
+            `# Eigen enchant-effect – ${e.name || e.id} (BlockyMod Studio)\n# Commando's hieronder draaien bij elke hit:\n` + String(e.eigenCode || "# vul aan in de app").trim() + "\n");
+        }
         put(`src/main/resources/data/${ns}/tags/item/enchantable/${e.id}.json`, json({ values: enchantTagValues(p, e) }));
         put(`src/main/resources/data/minecraft/tags/enchantment/in_enchanting_table.json`, json({ values: enchants.map((x) => `${ns}:${x.id}`) }));
       } else {
@@ -657,6 +775,12 @@ Triggers uit de app: ${chosen.length ? chosen.join(", ") : (m.behavior ? "gedrag
       }
       put(`src/main/resources/assets/${ns}/sounds.json`, json(sj));
       put(`src/main/java/${pkgDir(p)}/ModSounds.java`, modSounds(p));
+    }
+    if ((p.effects || []).length) {
+      put(`src/main/java/${pkgDir(p)}/ModEffects.java`, modEffects(p));
+    }
+    if (!isMojmap(p) && (p.potions || []).length) {
+      put(`src/main/java/${pkgDir(p)}/ModPotions.java`, modPotions(p));
     }
 
     // ── Quests (advancements) ──
@@ -886,10 +1010,367 @@ archives_base_name=${p.meta.modId}
   //  JAVA
   // ════════════════════════════════════════════════════════════════
 
+
+
+  // ── Drankjes-effecten: gedeelde helpers ──
+  function bottleSet(pl) {
+    return Object.assign({ normaal: true, splash: true, lingering: true, pijl: true }, pl.bottles || {});
+  }
+  function potColorInt(pl) {
+    return parseInt(String(pl.kleur || "#3366cc").replace(/^#/, "").padEnd(6, "0").slice(0, 6), 16) || 0x3366cc;
+  }
+  /** Effect-instanties als gedeelde lijst-informatie. */
+  function potEffectRows(p, pl) {
+    return (pl.effects || []).map((r) => ({
+      id: r.eff || "minecraft:speed",
+      dur: Math.max(1, parseInt(r.dur, 10) || 60) * 20,
+      amp: Math.max(0, parseInt(r.amp, 10) || 0)
+    }));
+  }
+  /** 26.3: Holder-resolutie via de registry. ⚠️ ongeldige id → AI-fix. */
+  function mjEffectRef(id) {
+    return `net.minecraft.core.Holder.direct(net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.get(net.minecraft.resources.ResourceLocation.parse("${id}")))`;
+  }
+  function mjInstanceList(p, pl) {
+    const rows = potEffectRows(p, pl).map((r) => `new net.minecraft.world.effect.MobEffectInstance(${mjEffectRef(r.id)}, ${r.dur}, ${r.amp})`);
+    return `java.util.List.of(${rows.join(", ") || " "})`;
+  }
+  /** ⚠️ PotionContents-recordvolgorde (potion, custom_color, custom_effects) – AI-fix bij compile-fout. */
+  function mjContents(p, pl) {
+    return `new net.minecraft.world.item.component.PotionContents(java.util.Optional.empty(), java.util.Optional.of(${potColorInt(pl)}), ${mjInstanceList(p, pl)})`;
+  }
+  /** 1.20.1 (yarn): ruwe registry-resolutie – werkt voor vanilla én eigen effect-id's. */
+  function yvEffectRef(id) {
+    return `net.minecraft.registry.Registries.STATUS_EFFECT.get(net.minecraft.util.Identifier.tryParse("${id}"))`;
+  }
+  function yvInstanceList(p, pl) {
+    const rows = potEffectRows(p, pl).map((r) => `new net.minecraft.entity.effect.StatusEffectInstance(${yvEffectRef(r.id)}, ${r.dur}, ${r.amp})`);
+    return rows.join(", ");
+  }
+  const BREW_INGR = { "minecraft:nether_wart": "NETHER_WART", "minecraft:redstone": "REDSTONE", "minecraft:glowstone": "GLOWSTONE", "minecraft:dragon_breath": "DRAGON_BREATH", "minecraft:gunpowder": "GUNPOWDER" };
+
+  /** Drankjes → ModPotions.java (1.20.1 yarn): Potion-registry + fles-items. */
+  function modPotions(p) {
+    const ns = p.meta.modId;
+    const rows = [];
+    for (const pl of (p.potions || [])) {
+      const cn = constname(pl.id);
+      const bot = bottleSet(pl);
+      const instances = yvInstanceList(p, pl);
+      rows.push(`    /** ${pl.naam || pl.id} – potion-entry (brouwen + vanilla-fles-resolver) */`);
+      rows.push(`    public static final Potion ${cn}_POTION = net.minecraft.registry.Registry.register(net.minecraft.registry.Registry.POTION, ${idExpr(p, `"${pl.id}"`)}, new Potion(${instances}));`);
+      const std = itemSettings(p) + ".maxCount(1)";
+      if (bot.normaal) rows.push(`    public static final Item ${cn} = net.minecraft.registry.Registry.register(net.minecraft.registry.Registries.ITEM, ${idExpr(p, `"${pl.id}"`)}, new Drink("${ns}:${pl.id}", ${std}));`);
+      if (bot.splash) rows.push(`    public static final Item ${cn}_SPLASH = net.minecraft.registry.Registry.register(net.minecraft.registry.Registries.ITEM, ${idExpr(p, `"${pl.id}_splash"` )}, new SplashB("${ns}:${pl.id}", ${std}));`);
+      if (bot.lingering) rows.push(`    public static final Item ${cn}_LINGERING = net.minecraft.registry.Registry.register(net.minecraft.registry.Registries.ITEM, ${idExpr(p, `"${pl.id}_lingering"` )}, new LingB("${ns}:${pl.id}", ${std}));`);
+      if (bot.pijl) rows.push(`    public static final Item ${cn}_ARROW = net.minecraft.registry.Registry.register(net.minecraft.registry.Registries.ITEM, ${idExpr(p, `"${pl.id}_arrow"` )}, new TippedB("${ns}:${pl.id}", ${itemSettings(p)}));`);
+      rows.push("");
+    }
+
+    const tabAdds = (p.potions || []).filter((pl) => bottleSet(pl).normaal)
+      .map((pl) => `            entries.add(${constname(pl.id)});`).join("\n");
+
+    return `package ${javaPackage(p)};
+
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.LingeringPotionItem;
+import net.minecraft.item.PotionItem;
+import net.minecraft.item.SplashPotionItem;
+import net.minecraft.item.TippedArrowItem;
+import net.minecraft.potion.Potion;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.world.World;
+
+/**
+ * Drankjes van ${p.meta.name} – BlockyMod Studio.
+ * ⚠️ Fles-klassen zetten de "Potion"-NBT automatisch → drinken/gooid werkt
+ *    met de gewone Minecraft-animaties. Compile-fout op een klasse-naam? → AI-fix.
+ */
+public final class ModPotions {
+    private ModPotions() {}
+
+${rows.join("\n") || "    // (nog geen drankjes)"}
+
+    // ── Fles-klassen (NBT-vuller + vanilla gedrag) ──
+
+    /** Drinkfles – effecten uit de Potion-registry (animatie blijft standaard). */
+    public static class Drink extends PotionItem {
+        private final String pot;
+
+        public Drink(String pot, Item.Settings s) {
+            super(s);
+            this.pot = pot;
+        }
+
+        @Override
+        public ActionResult use(World world, PlayerEntity user, Hand hand) {
+            ItemStack st = user.getStackInHand(hand);
+            if (st.getNbt() == null || !st.getNbt().contains("Potion")) st.getOrCreateNbt().putString("Potion", pot);
+            return super.use(world, user, hand);
+        }
+    }
+
+    /** Spetterfles (splash). */
+    public static class SplashB extends SplashPotionItem {
+        private final String pot;
+
+        public SplashB(String pot, Item.Settings s) {
+            super(s);
+            this.pot = pot;
+        }
+
+        @Override
+        public ActionResult use(World world, PlayerEntity user, Hand hand) {
+            ItemStack st = user.getStackInHand(hand);
+            if (st.getNbt() == null || !st.getNbt().contains("Potion")) st.getOrCreateNbt().putString("Potion", pot);
+            return super.use(world, user, hand);
+        }
+    }
+
+    /** Wolkfles (lingering). */
+    public static class LingB extends LingeringPotionItem {
+        private final String pot;
+
+        public LingB(String pot, Item.Settings s) {
+            super(s);
+            this.pot = pot;
+        }
+
+        @Override
+        public ActionResult use(World world, PlayerEntity user, Hand hand) {
+            ItemStack st = user.getStackInHand(hand);
+            if (st.getNbt() == null || !st.getNbt().contains("Potion")) st.getOrCreateNbt().putString("Potion", pot);
+            return super.use(world, user, hand);
+        }
+    }
+
+    /** Gepijlde pijl (tipped arrow). ⚠️ createArrow-signatuur kan per mappingsversie wijzigen → AI-fix. */
+    public static class TippedB extends TippedArrowItem {
+        private final String pot;
+
+        public TippedB(String pot, Item.Settings s) {
+            super(s);
+            this.pot = pot;
+        }
+
+        @Override
+        public net.minecraft.entity.projectile.arrow.ArrowEntity createArrow(World world, ItemStack stack, PlayerEntity user, Hand hand) {
+            if (stack.getNbt() == null || !stack.getNbt().contains("Potion")) stack.getOrCreateNbt().putString("Potion", pot);
+            return super.createArrow(world, stack, user, hand);
+        }
+    }
+
+    public static void register() {
+        // velden hierboven registreren zichzelf${tabAdds ? `; items in de creatieve tab:
+        net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents.modifyEntriesEvent(net.minecraft.item.ItemGroups.INGREDIENTS).register(entries -> {
+${tabAdds}
+        });` : ""}
+    }
+}
+`;
+  }
+
+
+  // ── Klassen-fragmenten: interactie-geluid (blok/item) + drink-flesje ──
+  const YARN_BLOCK_CLS = `
+    /** Rechtsklik op het blok → geluid (BlockyMod Studio). */
+    private static class InteractBlock extends Block {
+        private final net.minecraft.sound.SoundEvent snd;
+
+        InteractBlock(net.minecraft.sound.SoundEvent snd, AbstractBlock.Settings s) {
+            super(s);
+            this.snd = snd;
+        }
+
+        @Override
+        public net.minecraft.util.ActionResult onUse(net.minecraft.block.BlockState state, net.minecraft.world.World world, net.minecraft.util.math.BlockPos pos, net.minecraft.entity.player.PlayerEntity player, net.minecraft.util.Hand hand, net.minecraft.util.hit.BlockHitResult hit) {
+            if (!world.isClient()) {
+                world.playSound(null, pos, snd, net.minecraft.sound.SoundSource.BLOCKS, 1.0F, 1.0F);
+            }
+            return super.onUse(state, world, pos, player, hand, hit);
+        }
+    }
+`;
+
+  const MOJ_BLOCK_CLS = `
+    /** Rechtsklik op het blok → geluid (BlockyMod Studio). */
+    private static class InteractBlock extends Block {
+        private final net.minecraft.sounds.SoundEvent snd;
+
+        InteractBlock(net.minecraft.sounds.SoundEvent snd, BlockBehaviour.Properties p) {
+            super(p);
+            this.snd = snd;
+        }
+
+        @Override
+        protected net.minecraft.world.level.block.state.BlockState useWithoutItem(net.minecraft.world.level.block.state.BlockState state, net.minecraft.core.Level level, net.minecraft.core.BlockPos pos, net.minecraft.world.entity.player.Player player, net.minecraft.world.phys.BlockHitResult hit) {
+            if (!level.isClientSide()) {
+                level.playSound(null, pos, snd, net.minecraft.world.level.SoundSource.BLOCKS, 1.0F, 1.0F);
+            }
+            return super.useWithoutItem(state, level, pos, player, hit);
+        }
+    }
+`;
+
+  const YARN_ITEM_CLS = `
+    /** Rechtsklik met het item → geluid (BlockyMod Studio). */
+    private static class UseSoundItem extends Item {
+        private final net.minecraft.sound.SoundEvent snd;
+
+        UseSoundItem(net.minecraft.sound.SoundEvent snd, Item.Settings s) {
+            super(s);
+            this.snd = snd;
+        }
+
+        @Override
+        public net.minecraft.util.ActionResult use(net.minecraft.world.World world, net.minecraft.entity.player.PlayerEntity user, net.minecraft.util.Hand hand) {
+            if (!world.isClient()) {
+                world.playSound(null, user.getBlockPos(), snd, net.minecraft.sound.SoundSource.PLAYERS, 1.0F, 1.0F);
+            }
+            return super.use(world, user, hand);
+        }
+    }
+`;
+
+  const MOJ_ITEM_CLS = `
+    /** Rechtsklik met het item → geluid (BlockyMod Studio). */
+    private static class UseSoundItem extends Item {
+        private final net.minecraft.sounds.SoundEvent snd;
+
+        UseSoundItem(net.minecraft.sounds.SoundEvent snd, Item.Properties p) {
+            super(p);
+            this.snd = snd;
+        }
+
+        @Override
+        public net.minecraft.world.InteractionResult use(net.minecraft.world.level.Level level, net.minecraft.world.entity.player.Player player, net.minecraft.world.InteractionHand hand) {
+            if (!level.isClientSide()) {
+                level.playSound(null, player.blockPosition(), snd, net.minecraft.world.level.SoundSource.PLAYERS, 1.0F, 1.0F);
+            }
+            return super.use(level, player, hand);
+        }
+    }
+`;
+
+  const MOJ_DRINK_CLASS = `
+    /** Zelf-drinkbaar flesje – effecten direct toepenen (26.3). ⚠️ drink-animatie erbij? → AI-fix. */
+    private static class BMDrinkItem extends Item {
+        private final java.util.List<net.minecraft.world.effect.MobEffectInstance> effects;
+
+        BMDrinkItem(java.util.List<net.minecraft.world.effect.MobEffectInstance> effects, Item.Properties p) {
+            super(p);
+            this.effects = effects;
+        }
+
+        @Override
+        public net.minecraft.world.InteractionResult use(net.minecraft.world.level.Level level, net.minecraft.world.entity.player.Player player, net.minecraft.world.InteractionHand hand) {
+            if (!level.isClientSide()) {
+                for (net.minecraft.world.effect.MobEffectInstance ie : effects) {
+                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(ie.getEffect(), ie.getDuration(), ie.getAmplifier()));
+                }
+                net.minecraft.world.item.ItemStack st = player.getItemInHand(hand);
+                st.shrink(1);
+                if (st.isEmpty()) {
+                    player.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.GLASS_BOTTLE));
+                }
+                player.swing(hand);
+            }
+            return net.minecraft.world.InteractionResult.sidedSuccess(level.isClientSide());
+        }
+    }
+`;
+
+  /** Eigen status-effecten → ModEffects.java (beide mappings). */
+  function modEffects(p) {
+    const ns = p.meta.modId;
+    const moj = isMojmap(p);
+    const catOf = (e) => e.gedrag === "schade" ? "HARMFUL" : e.gedrag === "genezing" ? "BENEFICIAL" : "NEUTRAL";
+    const cat = (e) => moj ? `net.minecraft.world.effect.MobEffectCategory.${catOf(e)}` : `net.minecraft.entity.effect.StatusEffectCategory.${catOf(e)}`;
+    const hex = (e) => "0x" + String(e.kleur || "#55cc55").replace(/^#/, "").padEnd(6, "0").slice(0, 6).toUpperCase();
+    const fields = (p.effects || []).map((e) => {
+      let overrides = "";
+      if (e.gedrag === "schade") {
+        overrides = moj
+          ? ` {\n                // ⚠️ Tick-methode-namen verschillen per mappings-versie (AI-fix bij compile-fout)\n                @Override\n                public boolean shouldApplyEffectTickThisTick(int duration, int amplifier) {\n                    return duration % 40 == 0;\n                }\n\n                @Override\n                public void applyEffectTick(net.minecraft.world.entity.LivingEntity entity, int amplifier) {\n                    entity.hurt(entity.damageSources().magic(), 1.0F);\n                }\n            }`
+          : ` {\n                // ⚠️ Tick-methode-namen verschillen per mappings-versie (AI-fix bij compile-fout)\n                @Override\n                public boolean canApplyUpdateEffect(int duration, int amplifier) {\n                    return duration % 40 == 0;\n                }\n\n                @Override\n                public void applyUpdateEffect(net.minecraft.entity.LivingEntity entity, int amplifier) {\n                    entity.damage(entity.getDamageSources().magic(), 1.0F);\n                }\n            }`;
+      } else if (e.gedrag === "genezing") {
+        overrides = moj
+          ? ` {\n                // ⚠️ Tick-methode-namen verschillen per mappings-versie (AI-fix bij compile-fout)\n                @Override\n                public boolean shouldApplyEffectTickThisTick(int duration, int amplifier) {\n                    return duration % 60 == 0;\n                }\n\n                @Override\n                public void applyEffectTick(net.minecraft.world.entity.LivingEntity entity, int amplifier) {\n                    entity.heal(1.0F);\n                }\n            }`
+          : ` {\n                // ⚠️ Tick-methode-namen verschillen per mappings-versie (AI-fix bij compile-fout)\n                @Override\n                public boolean canApplyUpdateEffect(int duration, int amplifier) {\n                    return duration % 60 == 0;\n                }\n\n                @Override\n                public void applyUpdateEffect(net.minecraft.entity.LivingEntity entity, int amplifier) {\n                    entity.heal(1.0F);\n                }\n            }`;
+      }
+      const cn = constname(e.id);
+      if (moj) {
+        return `    public static final net.minecraft.world.effect.MobEffect ${cn} = register("${e.id}",\n            new net.minecraft.world.effect.MobEffect(${cat(e)}, ${hex(e)})${overrides});`;
+      }
+      return `    public static final net.minecraft.entity.effect.StatusEffect ${cn} = net.minecraft.registry.Registry.register(\n            net.minecraft.registry.Registries.STATUS_EFFECT,\n            ${idExpr(p, `"${e.id}"`)},\n            new net.minecraft.entity.effect.StatusEffect(${cat(e)}, ${hex(e)})${overrides});`;
+    }).join("\n\n");
+    if (moj) {
+      return `package ${javaPackage(p)};
+
+/**
+ * Eigen status-effecten van ${p.meta.name} – BlockyMod Studio.
+ * 🎨 Alleen-visueel hoeft geen extra code; schade/genezing hebben tick-haksels
+ *    (⚠️ methode-namen kunnen per mappings-versie verschillen → AI-fix).
+ */
+public final class ModEffects {
+    private ModEffects() {}
+
+${fields || "    // (nog geen eigen effecten)"}
+
+    private static net.minecraft.world.effect.MobEffect register(String id, net.minecraft.world.effect.MobEffect effect) {
+        net.minecraft.resources.ResourceKey<net.minecraft.world.effect.MobEffect> key =
+                net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.key(), ModMain.id(id));
+        return net.minecraft.core.registry.Registry.register(net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT, key, effect);
+    }
+
+    public static void initialize() {
+        // velden hierboven registreren zichzelf bij het laden van de klasse
+    }
+}
+`;
+    }
+    return `package ${javaPackage(p)};
+
+/**
+ * Eigen status-effecten van ${p.meta.name} – BlockyMod Studio.
+ * 🎨 Alleen-visueel hoeft geen extra code; schade/genezing hebben tick-haksels
+ *    (⚠️ methode-namen kunnen per mappings-versie verschillen → AI-fix).
+ */
+public final class ModEffects {
+    private ModEffects() {}
+
+${fields || "    // (nog geen eigen effecten)"}
+
+    public static void register() {
+        // velden hierboven registreren zichzelf bij het laden van de klasse
+    }
+}
+`;
+  }
+
   function modMain(p) {
     if (isMojmap(p)) return modMainM(p);
     const story = p.story.chapters.length ? "        story.StoryEvents.register();\n" : "";
     const snd = (p.sounds && p.sounds.length) ? "        ModSounds.register();\n" : "";
+    const effReg = (p.effects && p.effects.length) ? "        ModEffects.register();\n" : "";
+    const potReg = (p.potions && p.potions.length) ? "        ModPotions.register();\n" : "";
+    const brew = (p.potions || []).filter((pl) => pl.brew && pl.brew.on !== false).map((pl) => {
+      const ingr = BREW_INGR[pl.brew.ingr] || "NETHER_WART";
+      const from = pl.brew.van === "awkward" ? "awkward" : "water";
+      const mcId = is121(p)
+        ? `net.minecraft.util.Identifier.of("minecraft", "${from}")`
+        : `new net.minecraft.util.Identifier("minecraft", "${from}")`;
+      return `        // 🧪 ${pl.naam || pl.id} brouwen (basis: ${from})
+        net.fabricmc.fabric.api.registry.BrewingRecipeRegistry.registerPotionRecipe(
+                net.minecraft.registry.Registry.get(net.minecraft.registry.Registry.POTION, ${mcId}),
+                net.minecraft.item.Items.${ingr},
+                ModPotions.${constname(pl.id)}_POTION);`;
+    }).join("\n");
+    const brewAll = brew ? brew + "\n" : "";
     return `package ${javaPackage(p)};
 
 import net.fabricmc.api.ModInitializer;
@@ -913,7 +1394,7 @@ public class ModMain implements ModInitializer {
         ModBlocks.register();
         ModItems.register();
         ModEntities.register();
-${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${(p.enchants && p.enchants.length) ? "        ModEnchantments.register();\n" : ""}${snd}${story}
+${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${(p.enchants && p.enchants.length) ? "        ModEnchantments.register();\n" : ""}${effReg}${potReg}${snd}${brewAll}${story}
         LOGGER.info("[{}] geïnitialiseerd – veel bouwplezier!", MOD_ID);
     }
 }
@@ -929,8 +1410,9 @@ ${p.guis.length ? "        gui.ModScreenHandlers.register();\n" : ""}${(p.enchan
       const c = consts.get(b.id);
       const resistance = (Math.round((b.hardness || 1) * 5 * 10) / 10).toFixed(1);
       const tool = b.requiresTool ? (b.tool || "pickaxe") : "none";
+      const iSnd = b.interactSound ? triggerSoundRef(p, { triggerSound: b.interactSound }, "yarn") : null;
       const lines = [
-        `    public static final Block ${c} = new Block(AbstractBlock.Settings.create()`,
+        `    public static final Block ${c} = new ${iSnd ? `InteractBlock(${iSnd}, AbstractBlock.Settings.create()` : `Block(AbstractBlock.Settings.create()`}`,
         materialLine(p, tool),
         `            .strength(${(b.hardness ?? 1).toFixed(1)}F, ${resistance}F)`
       ];
@@ -965,6 +1447,7 @@ ${fields || "    // (nog geen blokken – maak er een in BlockyMod Studio!)"}
     public static void register() {
 ${regs || "        // niets te registreren"}
     }
+${p.blocks.some((b) => b.interactSound) ? YARN_BLOCK_CLS : ""}
 }
 `;
   }
@@ -1008,7 +1491,8 @@ ${regs || "        // niets te registreren"}
       if (it.rarity) bits.push(`rarity(net.minecraft.util.Rarity.${String(it.rarity).toUpperCase()})`);
       if (it.fireproof) bits.push("fireproof()");
       const s = settings + "." + bits.join(".");
-      fields += `    public static final Item ${c} = new Item(${s});\n`;
+      const iSnd = (!isArmor(it) && it.interactSound) ? triggerSoundRef(p, { triggerSound: it.interactSound }, "yarn") : null;
+      fields += `    public static final Item ${c} = new ${iSnd ? `UseSoundItem(${iSnd}, ${s})` : `Item(${s})`};\n`;
       regs += `        Registry.register(Registries.ITEM, ModMain.id("${it.id}"), ${c});\n`;
     }
     for (const m of p.mobs) {
@@ -1017,6 +1501,20 @@ ${regs || "        // niets te registreren"}
       regs += `        Registry.register(Registries.ITEM, ModMain.id("${m.id}_spawn_egg"), ${c});\n`;
     }
 
+    const blockTabEvs = p.blocks.length ? `
+        // 🗂 Blokken in de creatieve tab (1.20.1) ⚠️ API-naam wijkt mogelijk af → AI-fix
+        net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents.modifyEntriesEvent(net.minecraft.item.ItemGroups.BUILDING_BLOCKS).register(entries -> {
+${p.blocks.map((b) => `            entries.add(${consts.get(b.id)});`).join("\n")}
+        });` : "";
+    const itemTabFields = [
+      ...p.items.map((it) => byId.get(it.id)),
+      ...p.mobs.map((m) => byId.get(m.id + "_spawn_egg"))
+    ].filter(Boolean);
+    const itemTabEvs = itemTabFields.length ? `
+        // 🗂 Items in de creatieve tab (1.20.1) ⚠️ API-naam wijkt mogelijk af → AI-fix
+        net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents.modifyEntriesEvent(net.minecraft.item.ItemGroups.INGREDIENTS).register(entries -> {
+${itemTabFields.map((f) => `            entries.add(${f});`).join("\n")}
+        });` : "";
     const imports = new Set(["import net.minecraft.item.BlockItem;",
       "import net.minecraft.item.Item;", "import net.minecraft.registry.Registries;",
       "import net.minecraft.registry.Registry;",
@@ -1036,8 +1534,9 @@ public final class ModItems {
 
 ${fields || "    // (nog geen items)"}
     public static void register() {
-${regs || "        // niets te registreren"}
+${regs || "        // niets te registreren"}${blockTabEvs}${itemTabEvs}
     }
+${p.items.some((it) => it.interactSound && !isArmor(it)) ? YARN_ITEM_CLS : ""}
 }
 `;
   }
@@ -1110,15 +1609,19 @@ ${regs}
                 this.dropStack(new ItemStack(${ref}, ${Math.max(1, d.count || 1)}));
             }`).join("\n");
 
+    const iSndY = m.interactSound ? triggerSoundRef(p, { triggerSound: m.interactSound }, "yarn") : "";
     let interact = "";
-    if (guiHandler) {
+    if (guiHandler || iSndY) {
       interact = `
     /**
-     * Rechtermuisklik op de mob → opent je GUI "${gui.name}".
+     * Rechtermuisklik op de mob${guiHandler ? " → opent je GUI \"" + gui.name + "\"" : " → speelt een geluid"}.
      */
     @Override
     public boolean interactMob(PlayerEntity player, Hand hand) {
-        if (!this.getWorld().isClient() && player instanceof ServerPlayerEntity serverPlayer) {
+${iSndY ? `        if (!this.getWorld().isClient()) {
+            this.playSound(${iSndY}, 1.0F, 1.0F);
+        }` : ""}
+${guiHandler ? `        if (!this.getWorld().isClient() && player instanceof ServerPlayerEntity serverPlayer) {
             serverPlayer.openHandledScreen(new SimpleNamedScreenHandlerFactory() {
                 @Override
                 public Text getDisplayName() {
@@ -1131,7 +1634,7 @@ ${regs}
                 }
             });
             return true;
-        }
+        }` : ""}
         return super.interactMob(player, hand);
     }
 `;
@@ -1604,6 +2107,26 @@ ${renderRegs || "        // geen mobs om te registreren"}
       en[`subtitles.${ns}.${s.id}`] = s.naam || s.id;
       nl[`subtitles.${ns}.${s.id}`] = s.naam || s.id;
     }
+    for (const fx of (p.effects || [])) {
+      en[`effect.${ns}.${fx.id}`] = fx.naam || fx.id;
+      nl[`effect.${ns}.${fx.id}`] = fx.naam || fx.id;
+    }
+    for (const pl of (p.potions || [])) {
+      const bot = pl.bottles || { normaal: true, splash: true, lingering: true, pijl: true };
+      const variants = [
+        [bot.normaal, "", "🧪 "],
+        [bot.splash, "_splash", "💦 "],
+        [bot.lingering, "_lingering", "☁️ "],
+        [bot.pijl, "_arrow", "🏹 "]
+      ];
+      for (const [on, suf, pre] of variants) {
+        if (!on) continue;
+        en[`item.${ns}.${pl.id}${suf}`] = pre + (pl.naam || pl.id) + (suf ? ` (${suf.replace("_", "")})` : "");
+        nl[`item.${ns}.${pl.id}${suf}`] = pre + (pl.naam || pl.id) + (suf ? " (" + (suf === "_splash" ? "spetter" : suf === "_lingering" ? "wolk" : "pijl") + ")" : "");
+      }
+      en[`potion.${ns}.${pl.id}`] = pl.naam || pl.id; // 1.20.1 vanilla-fles naam
+      nl[`potion.${ns}.${pl.id}`] = pl.naam || pl.id;
+    }
     return { en, nl };
   }
 
@@ -1877,6 +2400,14 @@ public final class StoryManager {
             }
             case "geluid" -> runCommand(player, "playsound " + getStr(a, "sound", "minecraft:block.note_block.pling") + " master @s ~ ~ ~ " + getStr(a, "volume", "1") + " " + getStr(a, "pitch", "1"));
             case "partikel" -> runCommand(player, "particle " + getStr(a, "particle", "minecraft:flame") + " ~ ~1 ~ 0.2 0.5 0.2 0.02 " + (a.has("count") ? a.get("count").getAsInt() : 20));
+            case "effect" -> {
+                var ef = net.minecraft.registry.Registries.STATUS_EFFECT.get(net.minecraft.util.Identifier.tryParse(getStr(a, "effect", "minecraft:speed")));
+                if (ef != null) {
+                    player.addStatusEffect(new net.minecraft.entity.effect.StatusEffectInstance(ef,
+                            a.has("dur") ? a.get("dur").getAsInt() * 20 : 200,
+                            a.has("amp") ? a.get("amp").getAsInt() : 0));
+                }
+            }
             case "gui" -> openGui(player, getStr(a, "gui", ""));
             case "next" -> {
                 Progress pr = getProgress(player.getUuid());
@@ -2045,6 +2576,7 @@ archives_base_name=${p.meta.modId}
   function modMainM(p) {
     const gui = p.guis.length ? "        gui.ModScreenHandlers.initialize();\n" : "";
     const creative = "        CreativeTab.initialize(); // ⚠️ zie CreativeTab.java\n";
+    const effRegM = (p.effects && p.effects.length) ? "        ModEffects.initialize();\n" : "";
     const story = p.story.chapters.length ? "        story.StoryEvents.register();\n" : "";
     const snd = (p.sounds && p.sounds.length) ? "        ModSounds.register();\n" : "";
     return `package ${javaPackage(p)};
@@ -2071,7 +2603,7 @@ public class ModMain implements ModInitializer {
         ModBlocks.initialize();
         ModItems.initialize();
         ModEntities.initialize();
-${gui}${creative}${snd}${story}
+${effRegM}${gui}${creative}${snd}${story}
         LOGGER.info("[{}] geïnitialiseerd – veel bouwplezier!", MOD_ID);
     }
 }
@@ -2082,8 +2614,9 @@ ${gui}${creative}${snd}${story}
     const fields = p.blocks.map((b) => {
       const resistance = (Math.round((b.hardness || 1) * 5 * 10) / 10).toFixed(1);
       const sound = soundGroup(b);
+      const iSnd = b.interactSound ? triggerSoundRef(p, { triggerSound: b.interactSound }, "mojmap") : null;
       const lines = [
-        `    public static final Block ${constname(b.id)} = registerBlock("${b.id}", Block::new,`,
+        `    public static final Block ${constname(b.id)} = registerBlock("${b.id}", ${iSnd ? `props -> new InteractBlock(${iSnd}, props)` : `Block::new`},`,
         `            BlockBehaviour.Properties.of()`,
         `                    .strength(${(b.hardness ?? 1).toFixed(1)}F, ${resistance}F)`
       ];
@@ -2131,6 +2664,7 @@ ${fields || "    // (nog geen blokken – maak er een in BlockyMod Studio!)"}
     public static void initialize() {
 ${p.blocks.length ? (regs || "        // geladen via statische velden") : "        // niets te registreren"}
     }
+${p.blocks.some((b) => b.interactSound) ? MOJ_BLOCK_CLS : ""}
 }
 `;
   }
@@ -2139,15 +2673,28 @@ ${p.blocks.length ? (regs || "        // geladen via statische velden") : "     
     const blockItems = p.blocks.map((b) =>
       `    public static final BlockItem ${constname(b.id)} = registerBlockItem("${b.id}", ModBlocks.${constname(b.id)});`
     ).join("\n");
-    const plainItems = p.items.map((it) =>
-      `    public static final Item ${constname(it.id)} = registerItem("${it.id}", props -> new Item(props${itemPropsM(p, it)}));`
-    ).join("\n");
+    const plainItems = p.items.map((it) => {
+      const iSnd = (!isArmor(it) && it.interactSound) ? triggerSoundRef(p, { triggerSound: it.interactSound }, "mojmap") : null;
+      return `    public static final Item ${constname(it.id)} = registerItem("${it.id}", props -> new ${iSnd ? `UseSoundItem(${iSnd}, props${itemPropsM(p, it)})` : `Item(props${itemPropsM(p, it)})`});`;
+    }).join("\n");
     const eggs = p.mobs.map((m) =>
       `    public static final Item ${constname(m.id)}_SPAWN_EGG = registerItem("${m.id}_spawn_egg",
             props -> new SpawnEggItem(ModEntities.${constname(m.id)}, 0x${padHex(m.colors ? m.colors.primary : "ffffff")}, 0x${padHex(m.colors ? m.colors.secondary : "aaaaaa")}, props)); // ⚠️ als de kleur-ctor weg is: vraag de AI om de component-vorm`
     ).join("\n");
 
-    const parts = [blockItems, plainItems, eggs].filter(Boolean).join("\n");
+    const potParts = (p.potions || []).map((pl) => {
+      const bot = bottleSet(pl);
+      const lines = [];
+      const contents = mjContents(p, pl);
+      const comp = `props.component(net.minecraft.core.component.DataComponents.POTION_CONTENTS, ${contents})`;
+      if (bot.normaal) lines.push(`    public static final Item ${constname(pl.id)} = registerItem("${pl.id}", props -> new BMDrinkItem(${mjInstanceList(p, pl)}, props.maxCount(1)));`);
+      if (bot.splash) lines.push(`    public static final Item ${constname(pl.id + "_splash")} = registerItem("${pl.id}_splash", props -> new SplashPotionItem(${comp}.maxCount(1))); // ⚠️ klassenaam bij twijfel: AI-fix`);
+      if (bot.lingering) lines.push(`    public static final Item ${constname(pl.id + "_lingering")} = registerItem("${pl.id}_lingering", props -> new LingeringPotionItem(${comp}.maxCount(1))); // ⚠️ klassenaam bij twijfel: AI-fix`);
+      if (bot.pijl) lines.push(`    public static final Item ${constname(pl.id + "_arrow")} = registerItem("${pl.id}_arrow", props -> new TippedArrowItem(${comp})); // ⚠️ klassenaam bij twijfel: AI-fix`);
+      return lines.join("\n");
+    }).filter(Boolean).join("\n");
+
+    const parts = [blockItems, plainItems, potParts, eggs].filter(Boolean).join("\n");
 
     return `package ${javaPackage(p)};
 
@@ -2168,6 +2715,8 @@ public final class ModItems {
     private ModItems() {}
 
 ${parts || "    // (nog geen items)"}
+${p.items.some((it) => it.interactSound && !isArmor(it)) ? MOJ_ITEM_CLS : ""}
+${((p.potions || []).some((pl) => bottleSet(pl).normaal)) ? MOJ_DRINK_CLASS : ""}
 
     private static Item registerItem(String path,
             java.util.function.Function<Item.Properties, Item> factory) {
@@ -2250,21 +2799,28 @@ ${p.mobs.length ? attrs : "        // niets te registreren"}
             this.spawnAtLocation(new ItemStack(${ref}, ${Math.max(1, d.count || 1)}));
         }`).join("\n");
 
-    const interact = guiMenu ? `
+    const iSndM = m.interactSound ? triggerSoundRef(p, { triggerSound: m.interactSound }, "mojmap") : "";
+    let interact = "";
+    if (guiMenu || iSndM) {
+      interact = `
     /**
-     * Rechtermuisklik op de mob → opent je GUI "${gui.name}".
+     * Rechtermuisklik op de mob${guiMenu ? " → opent je GUI \"" + gui.name + "\"" : " → speelt een geluid"}.
      */
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
-        if (!this.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
+${iSndM ? `        if (!this.level().isClientSide) {
+            this.playSound(${iSndM}, 1.0F, 1.0F);
+        }` : ""}
+${guiMenu ? `        if (!this.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
             serverPlayer.openMenu(new SimpleMenuProvider(
                     (syncId, inv, p2) -> new ${guiMenu}(syncId, inv),
                     Component.literal("${escapeJava(gui.name)}")));
             return InteractionResult.sidedSuccess(this.level().isClientSide);
-        }
+        }` : ""}
         return super.mobInteract(player, hand);
     }
-` : "";
+`;
+    }
 
     return `package ${javaPackage(p)}.entity;
 
@@ -2611,16 +3167,25 @@ ${renderRegs || "        // geen mobs om te registreren"}
 
   function creativeTabM(p) {
     const blockAccepts = p.blocks.map((b) => `                    tab.accept(ModBlocks.${constname(b.id)}.asItem());`).join("\n");
+    const potAccepts = [];
+    for (const pl of (p.potions || [])) {
+      const bot = bottleSet(pl);
+      if (bot.normaal) potAccepts.push(`                    tab.accept(ModItems.${constname(pl.id)});`);
+      if (bot.splash) potAccepts.push(`                    tab.accept(ModItems.${constname(pl.id + "_splash")});`);
+      if (bot.lingering) potAccepts.push(`                    tab.accept(ModItems.${constname(pl.id + "_lingering")});`);
+      if (bot.pijl) potAccepts.push(`                    tab.accept(ModItems.${constname(pl.id + "_arrow")});`);
+    }
     const itemAccepts = [
       ...p.items.map((it) => `                    tab.accept(ModItems.${constname(it.id)});`),
-      ...p.mobs.map((m) => `                    tab.accept(ModItems.${constname(m.id)}_SPAWN_EGG);`)
+      ...p.mobs.map((m) => `                    tab.accept(ModItems.${constname(m.id)}_SPAWN_EGG);`),
+      ...potAccepts
     ].join("\n");
     const blocksTab = p.blocks.length ? `
         CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.BUILDING_BLOCKS)
                 .register(tab -> {
 ${blockAccepts}
                 });` : "";
-    const itemsTab = (p.items.length || p.mobs.length) ? `
+    const itemsTab = (p.items.length || p.mobs.length || (p.potions || []).length) ? `
         CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.${p.mobs.length && !p.items.length ? "SPAWN_EGGS" : "INGREDIENTS"})
                 .register(tab -> {
 ${itemAccepts}
@@ -2911,6 +3476,14 @@ public final class StoryManager {
             case "command" -> runCommand(player, getStr(a, "cmd", "say hallo"));
             case "geluid" -> runCommand(player, "playsound " + getStr(a, "sound", "minecraft:block.note_block.pling") + " master @s ~ ~ ~ " + getStr(a, "volume", "1") + " " + getStr(a, "pitch", "1"));
             case "partikel" -> runCommand(player, "particle " + getStr(a, "particle", "minecraft:flame") + " ~ ~1 ~ 0.2 0.5 0.2 0.02 " + (a.has("count") ? a.get("count").getAsInt() : 20));
+            case "effect" -> {
+                var ef = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.get(net.minecraft.resources.ResourceLocation.tryParse(getStr(a, "effect", "minecraft:speed")));
+                if (ef != null) {
+                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.core.Holder.direct(ef),
+                            a.has("dur") ? a.get("dur").getAsInt() * 20 : 200,
+                            a.has("amp") ? a.get("amp").getAsInt() : 0));
+                }
+            }
             case "gui" -> openGui(player, getStr(a, "gui", ""));
             case "next" -> {
                 Progress pr = getProgress(player.getUuid());
@@ -3017,6 +3590,25 @@ public final class StoryEvents {
         }
       });
     }
+    const variantJobs = (o, kind) => {
+      const els = Array.isArray(o.shapes) ? o.shapes : [];
+      els.forEach((e, i) => {
+        if (!e.color) return;
+        jobs.push({
+          path: `src/main/resources/assets/${ns}/textures/${kind}/${o.id}_vorm${i}.png`,
+          render: async () => TextureKit.canvasToPngBytes(TextureKit.pixelsToCanvas(TextureKit.generate("vlak", e.color, 1), 16))
+        });
+      });
+      const fm = o.faceTex || {};
+      for (const f of ["front", "back", "left", "right", "top", "bottom"]) {
+        if (!fm[f] || !fm[f].length) continue;
+        jobs.push({
+          path: `src/main/resources/assets/${ns}/textures/${kind}/${o.id}_${f}.png`,
+          render: async () => TextureKit.canvasToPngBytes(TextureKit.pixelsToCanvas(fm[f], 16))
+        });
+      }
+    };
+    for (const bb of p.blocks) variantJobs(bb, "block");
     for (const it of p.items) {
       jobs.push({
         path: `src/main/resources/assets/${ns}/textures/item/${it.id}.png`,
@@ -3030,6 +3622,25 @@ public final class StoryEvents {
           }
           return TextureKit.canvasToPngBytes(TextureKit.pixelsToCanvas(px, 16));
         }
+      });
+      variantJobs(it, "item");
+    }
+    for (const pl of (p.potions || [])) {
+      const bot = bottleSet(pl);
+      for (const [on, suf] of [[bot.normaal, ""], [bot.splash, "_splash"], [bot.lingering, "_lingering"], [bot.pijl, "_arrow"]]) {
+        if (!on) continue;
+        const isArrow = suf === "_arrow";
+        const kleur = pl.kleur || "#3366cc";
+        jobs.push({
+          path: `src/main/resources/assets/${ns}/textures/item/${pl.id}${suf}.png`,
+          render: async () => TextureKit.canvasToPngBytes(isArrow ? TextureKit.arrowPng(16, kleur) : TextureKit.bottlePng(16, kleur))
+        });
+      }
+    }
+    for (const fx of (p.effects || [])) {
+      jobs.push({
+        path: `src/main/resources/assets/${ns}/textures/mob_effect/${fx.id}.png`,
+        render: async () => TextureKit.canvasToPngBytes(TextureKit.armorPng(18, 18, fx.kleur || "#55cc55", 1))
       });
     }
     // wapenlagen (equipped-variant): 26.x → equipment-texturen, 1.20.1 → models/armor

@@ -1,10 +1,16 @@
 {
   "block.mijn_eerste_mod.glitchbench": "glitchbench",
-  "block.mijn_eerste_mod.mijn_werkbank": "glitchbench",
   "block.mijn_eerste_mod.farlands_glitch_part": "farlands glitch part",
   "item.mijn_eerste_mod.glitch_texture": "glitch texture",
+  "item.mijn_eerste_mod.mijn_item_2": "Mijn Item 2",
   "entity.mijn_eerste_mod.g_li_tch": "g!li*tch.?",
   "item.mijn_eerste_mod.g_li_tch_spawn_egg": "Ei om g!li*tch.? te roepen",
   "gui.mijn_eerste_mod.mijn_werkbank": "glitchbench",
-  "gui.mijn_eerste_mod.glitch": "glitch"
+  "gui.mijn_eerste_mod.glitch": "glitch",
+  "effect.mijn_eerste_mod.glitcheffect": "²¤²@³#¤²¼¤!$#@%^³¤¼²#%¤&²¼@$",
+  "item.mijn_eerste_mod.glitchdrankje": "🧪 #g##l#it#c###h####",
+  "item.mijn_eerste_mod.glitchdrankje_splash": "💦 #g##l#it#c###h#### (spetter)",
+  "item.mijn_eerste_mod.glitchdrankje_lingering": "☁️ #g##l#it#c###h#### (wolk)",
+  "item.mijn_eerste_mod.glitchdrankje_arrow": "🏹 #g##l#it#c###h#### (pijl)",
+  "potion.mijn_eerste_mod.glitchdrankje": "#g##l#it#c###h####"
 }

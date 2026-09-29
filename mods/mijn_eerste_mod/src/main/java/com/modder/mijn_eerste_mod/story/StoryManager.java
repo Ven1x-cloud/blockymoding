@@ -247,6 +247,16 @@ public final class StoryManager {
                 }
             }
             case "command" -> runCommand(player, getStr(a, "cmd", "say hallo"));
+            case "geluid" -> runCommand(player, "playsound " + getStr(a, "sound", "minecraft:block.note_block.pling") + " master @s ~ ~ ~ " + getStr(a, "volume", "1") + " " + getStr(a, "pitch", "1"));
+            case "partikel" -> runCommand(player, "particle " + getStr(a, "particle", "minecraft:flame") + " ~ ~1 ~ 0.2 0.5 0.2 0.02 " + (a.has("count") ? a.get("count").getAsInt() : 20));
+            case "effect" -> {
+                var ef = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.get(net.minecraft.resources.ResourceLocation.tryParse(getStr(a, "effect", "minecraft:speed")));
+                if (ef != null) {
+                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.core.Holder.direct(ef),
+                            a.has("dur") ? a.get("dur").getAsInt() * 20 : 200,
+                            a.has("amp") ? a.get("amp").getAsInt() : 0));
+                }
+            }
             case "gui" -> openGui(player, getStr(a, "gui", ""));
             case "next" -> {
                 Progress pr = getProgress(player.getUuid());

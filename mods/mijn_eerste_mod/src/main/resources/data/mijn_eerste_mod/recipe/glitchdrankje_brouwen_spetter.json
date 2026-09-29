@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:brewing",
+  "input": {
+    "item": "mijn_eerste_mod:glitchdrankje"
+  },
+  "reagent": {
+    "item": "minecraft:gunpowder"
+  },
+  "output": {
+    "id": "mijn_eerste_mod:glitchdrankje_splash"
+  }
+}

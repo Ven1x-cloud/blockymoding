@@ -29,13 +29,31 @@ public class GLiTchEntity extends Pig {
 
     public GLiTchEntity(EntityType<? extends Pig> entityType, Level level) {
         super(entityType, level);
+        // 🎬 BlockyMod gedrag: jager – valt spelers aan
+        this.goalSelector.addGoal(1, new net.minecraft.world.entity.ai.goal.MeleeAttackGoal(this, 1.2, true));
+        this.targetSelector.addGoal(2, new net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal<>(this, net.minecraft.world.entity.player.Player.class, true));
+    }
+    // 🎬 BlockyMod animatie-triggers – koppel hier je animaties (of laat de AI het coderen!)
+    private int bmTriggerTimer = 0;
+
+    private void blockyModTriggers() {
+        bmTriggerTimer++;
+        if (this.tickCount % 100 == 0) {
+            // ⏱ ELKE 5 SECONDEN: periodiek animatie-effect
+        }
+    }
+
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        this.blockyModTriggers();
     }
 
     /** Basis-attributen (leven, snelheid, aanval). */
     public static AttributeSupplier.Builder createAttributes() {
         return Pig.createAttributes()
                 .add(Attributes.MAX_HEALTH, 1000.0F)
-                .add(Attributes.MOVEMENT_SPEED, 10.000F)
+                .add(Attributes.MOVEMENT_SPEED, 1.000F)
                 .add(Attributes.ATTACK_DAMAGE, -16.5F);
     }
 
@@ -44,6 +62,7 @@ public class GLiTchEntity extends Pig {
      */
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
+
         if (!this.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
             serverPlayer.openMenu(new SimpleMenuProvider(
                     (syncId, inv, p2) -> new GlitchMenu(syncId, inv),

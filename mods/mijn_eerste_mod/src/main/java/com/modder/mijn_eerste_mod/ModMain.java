@@ -22,6 +22,7 @@ public class ModMain implements ModInitializer {
         ModBlocks.initialize();
         ModItems.initialize();
         ModEntities.initialize();
+        ModEffects.initialize();
         gui.ModScreenHandlers.initialize();
         CreativeTab.initialize(); // ⚠️ zie CreativeTab.java
         story.StoryEvents.register();

@@ -17,20 +17,22 @@ public final class ModBlocks {
 
     public static final Block GLITCHBENCH = registerBlock("glitchbench", Block::new,
             BlockBehaviour.Properties.of()
-                    .strength(5.0F, 25.0F)
-                    .requiresCorrectToolForDrops()
-                    .sound(SoundType.WOOD));
-
-    public static final Block MIJN_WERKBANK = registerBlock("mijn_werkbank", Block::new,
-            BlockBehaviour.Properties.of()
-                    .strength(5.0F, 25.0F)
-                    .requiresCorrectToolForDrops()
-                    .sound(SoundType.WOOD));
+                    .strength(10.0F, 50.0F)
+                    .lightLevel(state -> 5)
+                    .explosionResistance(0.5F)
+                    .friction(0.75F)
+                    .noCollission()
+                    .mapColor(net.minecraft.world.level.material.MapColor.COLOR_PURPLE)
+                    .randomTicks()
+                    .sound(SoundType.STONE));
 
     public static final Block FARLANDS_GLITCH_PART = registerBlock("farlands_glitch_part", Block::new,
             BlockBehaviour.Properties.of()
-                    .strength(23.6F, 117.8F)
-                    .lightLevel(state -> 10)
+                    .strength(23.8F, 118.8F)
+                    .lightLevel(state -> 12)
+                    .friction(0.30F)
+                    .mapColor(net.minecraft.world.level.material.MapColor.GRASS)
+                    .randomTicks()
                     .sound(SoundType.STONE));
 
     /** Registreert een blok met verplichte registry-key (1.21.2+ / 26.x). */
@@ -43,7 +45,7 @@ public final class ModBlocks {
 
     public static void initialize() {
         // "glitchbench" – registratie gebeurt via de statische velden (zie initialize())
-        // "mijn_werkbank" – registratie gebeurt via de statische velden (zie initialize())
         // "farlands_glitch_part" – registratie gebeurt via de statische velden (zie initialize())
     }
+
 }

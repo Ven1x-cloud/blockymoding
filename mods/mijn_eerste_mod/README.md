@@ -38,7 +38,7 @@ Gemaakt met **BlockyMod Studio** 🟩
 
 ## Structuur die de app heeft aangemaakt
 
-- 3 blok(ken), 1 item(s), 2 GUI('s),
+- 2 blok(ken), 2 item(s), 2 GUI('s),
   1 mob(s), 1 werkbank(en),
   2 verhaalhoofdstuk(ken).
 

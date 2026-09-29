@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:brewing",
+  "input": {
+    "item": "minecraft:potion",
+    "potion_contents": {
+      "potion": "minecraft:awkward"
+    }
+  },
+  "reagent": {
+    "item": "minecraft:dragon_breath"
+  },
+  "output": {
+    "id": "mijn_eerste_mod:glitchdrankje"
+  }
+}

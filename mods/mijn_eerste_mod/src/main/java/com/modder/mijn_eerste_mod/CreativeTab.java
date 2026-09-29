@@ -18,14 +18,18 @@ public final class CreativeTab {
         CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.BUILDING_BLOCKS)
                 .register(tab -> {
                     tab.accept(ModBlocks.GLITCHBENCH.asItem());
-                    tab.accept(ModBlocks.MIJN_WERKBANK.asItem());
                     tab.accept(ModBlocks.FARLANDS_GLITCH_PART.asItem());
                 });
 
         CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.INGREDIENTS)
                 .register(tab -> {
                     tab.accept(ModItems.GLITCH_TEXTURE);
+                    tab.accept(ModItems.MIJN_ITEM_2);
                     tab.accept(ModItems.G_LI_TCH_SPAWN_EGG);
+                    tab.accept(ModItems.GLITCHDRANKJE);
+                    tab.accept(ModItems.GLITCHDRANKJE_SPLASH);
+                    tab.accept(ModItems.GLITCHDRANKJE_LINGERING);
+                    tab.accept(ModItems.GLITCHDRANKJE_ARROW);
                 });
     }
 }
